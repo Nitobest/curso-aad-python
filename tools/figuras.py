@@ -262,3 +262,170 @@ def formula(latex, ruta=None, fontsize=30, ancho=8, alto=1.4):
     if ruta:
         fig.savefig(ruta, bbox_inches="tight", dpi=200, transparent=True)
     return fig
+
+
+# ================================================================== S2 — mirar antes de modelar (figuras de etapa, sin modelo)
+VERDE_OK = "#F2F2F2"
+
+
+def mapa_vacios(df, col_orden="fecha", disfrazados=("N/D",), muestra=1500, col_anio="anio"):
+    """Izquierda: cada fila de la imagen es un incidente (ordenados en el tiempo) y cada columna una
+    variable; gris oscuro = vacío real (NaN), rojo = vacío disfrazado de texto ("N/D").
+    Derecha: % de vacíos por columna. Sirve para ver CUÁNTO falta y también DÓNDE (¿en qué años?)."""
+    d = df.sort_values(col_orden).reset_index(drop=True)
+    idx = np.linspace(0, len(d) - 1, min(muestra, len(d))).astype(int)
+    d = d.iloc[idx]
+    M = d.isna().astype(int).values
+    for j, c in enumerate(d.columns):
+        if d[c].dtype == object:
+            M[d[c].astype(str).isin(disfrazados).values, j] = 2
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), gridspec_kw={"width_ratios": [1.6, 1]})
+    axes[0].imshow(M, aspect="auto", interpolation="nearest",
+                   cmap=ListedColormap([VERDE_OK, "#4D4D4D", ROJO]), vmin=0, vmax=2)
+    axes[0].set_xticks(range(len(d.columns))); axes[0].set_xticklabels(d.columns, rotation=60, ha="left")
+    axes[0].xaxis.tick_top()
+    if col_anio in d:
+        anios = d[col_anio].values
+        cambios = [0] + [i for i in range(1, len(anios)) if anios[i] != anios[i - 1]]
+        axes[0].set_yticks(cambios); axes[0].set_yticklabels([str(anios[i]) for i in cambios])
+    axes[0].set_xlabel("cada fila de la imagen es un incidente, ordenados en el tiempo (gris claro = dato presente)")
+    axes[0].spines[:].set_visible(False)
+    real = df.isna().mean() * 100
+    disf = pd.Series({c: (df[c].astype(str).isin(disfrazados).mean() * 100 if df[c].dtype == object else 0)
+                      for c in df.columns})
+    orden = (real + disf).sort_values().index
+    axes[1].barh(orden, real[orden], color="#4D4D4D", label="vacío real (NaN)")
+    axes[1].barh(orden, disf[orden], left=real[orden], color=ROJO, label=f"disfrazado ({', '.join(disfrazados)})")
+    for i, c in enumerate(orden):
+        t = real[c] + disf[c]
+        if t > 0:
+            axes[1].text(t + 0.1, i, f"{t:.1f} %", va="center", fontsize=8)
+    axes[1].set_xlabel("% de filas"); axes[1].legend(loc="lower right"); axes[1].set_title("% de vacíos por columna")
+    return _leyenda(fig, "no basta con contar vacíos: mire si se concentran en ciertos años. "
+                         "Y los rojos no aparecen en df.isna() — están escritos como texto.")
+
+
+def distribucion_hora(df, col_hora="hora_num", col_y="con_victimas"):
+    """Barras: cuántos incidentes hay a cada hora. Línea roja: qué % de ellos tiene víctimas.
+    Las dos curvas cuentan historias distintas."""
+    n = df[col_hora].value_counts().sort_index()
+    p = df.groupby(col_hora)[col_y].mean()
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.bar(n.index, n.values, color=AZUL, alpha=0.75, label="número de incidentes")
+    ax.set_xlabel("hora del día"); ax.set_ylabel("incidentes"); ax.set_xticks(range(24))
+    ax2 = ax.twinx(); ax2.spines["right"].set_visible(True)
+    ax2.plot(p.index, p.values * 100, "o-", color=ROJO, label="% con víctimas")
+    ax2.set_ylabel("% con víctimas", color=ROJO); ax2.set_ylim(50, 100)
+    h1, l1 = ax.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, loc="upper left")
+    ax.set_title("¿Cuándo hay más incidentes? ¿Cuándo son más graves?")
+    return _leyenda(fig, "las barras tienen picos en las horas pico (7 a.m. y 5 p.m.); la línea roja tiene su pico "
+                         "de madrugada: hay menos incidentes, pero son más graves.")
+
+
+def serie_mensual(df, col_fecha="fecha", col_y="con_victimas", marcas=None):
+    """Incidentes por mes, apilados: con víctimas (rojo) y solo daños (azul). Las marcas señalan
+    los quiebres: uno lo explica la realidad (todo cae), el otro el registro (solo cae un color)."""
+    s = df.set_index(col_fecha)[col_y]
+    vic = s.resample("MS").sum()
+    sd = s.resample("MS").size() - vic
+    fig, ax = plt.subplots(figsize=(12, 4.6))
+    ax.stackplot(vic.index, vic.values, sd.values, colors=[ROJO, AZUL], alpha=0.8,
+                 labels=["con víctimas (heridos o muertos)", "solo daños"])
+    ax.set_ylabel("incidentes por mes"); ax.legend(loc="upper right")
+    ax.set_title("Incidentes por mes, según gravedad")
+    for fecha, texto in (marcas or []):
+        f = pd.Timestamp(fecha)
+        ax.axvline(f, color=NEGRO, ls="--", lw=1)
+        ax.annotate(texto, (f, ax.get_ylim()[1] * 0.97), xytext=(5, 0), textcoords="offset points",
+                    color=NEGRO, fontsize=9, va="top")
+    return _leyenda(fig, "en abril de 2020 caen los dos colores: cambió la ciudad (cuarentena). En octubre de 2022 "
+                         "el rojo sigue igual y el azul desaparece: no cambió la ciudad, cambió el registro.")
+
+
+def vacio_informa(df, col_y, grupos, col_anio="anio", grupo_anio=None):
+    """Izquierda: % con víctimas en todo el dataset y en cada grupo de filas 'con vacío'
+    (grupos = {nombre: máscara booleana}). Derecha (opcional): de qué años son las filas del
+    grupo `grupo_anio`. Un vacío que 'predice' la y casi siempre está contando otra cosa."""
+    base = df[col_y].mean() * 100
+    vals = {"todos los incidentes": base} | {k: df.loc[m, col_y].mean() * 100 for k, m in grupos.items()}
+    ncols = 2 if grupo_anio else 1
+    fig, axes = plt.subplots(1, ncols, figsize=(13 if ncols == 2 else 8, 3.8), squeeze=False)
+    ax = axes[0, 0]
+    nombres = list(vals)[::-1]
+    ax.barh(nombres, [vals[k] for k in nombres], color=[GRIS if k == "todos los incidentes" else ROJO for k in nombres])
+    for i, k in enumerate(nombres):
+        ax.text(vals[k] + 0.8, i, f"{vals[k]:.0f} %", va="center")
+    ax.axvline(base, color=NEGRO, lw=1, ls=":"); ax.set_xlim(0, 105); ax.set_xlabel("% con víctimas")
+    ax.set_title("¿Las filas con vacío se parecen al resto?")
+    if grupo_anio:
+        c = df.loc[grupos[grupo_anio], col_anio].value_counts().sort_index()
+        axes[0, 1].bar(c.index.astype(str), c.values, color=ROJO)
+        for x, v in zip(c.index.astype(str), c.values):
+            axes[0, 1].text(x, v, f"{v:,}", ha="center", va="bottom", fontsize=8)
+        axes[0, 1].set_title(f"¿De qué año son las filas «{grupo_anio}»?")
+    return _leyenda(fig, "si las filas con vacío tienen una proporción muy distinta de la y, el vacío "
+                         "'informa'. La pregunta siguiente es: ¿informa sobre el incidente, o sobre cuándo se registró?")
+
+
+def one_hot_ejemplo(df, col, n=6, semilla=3):
+    """Una columna de texto con k categorías se vuelve k columnas de 0/1. Dibuja las dos tablas."""
+    d = (df[[col]].dropna().sample(frac=1, random_state=semilla)
+           .groupby(col, group_keys=False).head(1).head(n).reset_index(drop=True))
+    dum = pd.get_dummies(d[col], prefix=col, dtype=int)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 0.42 * n + 1.0), gridspec_kw={"width_ratios": [1, 3.2]})
+    for ax, tabla, titulo in ((axes[0], d, "antes: 1 columna de texto"),
+                              (axes[1], dum, f"después: {dum.shape[1]} columnas de 0/1, una por categoría")):
+        ax.axis("off"); ax.set_title(titulo)
+        t = ax.table(cellText=tabla.values, colLabels=list(tabla.columns), loc="center", cellLoc="center")
+        t.auto_set_font_size(False); t.set_fontsize(8); t.scale(1, 1.35)
+        for (r, cc), cell in t.get_celld().items():
+            cell.set_edgecolor("#DDDDDD")
+            if r == 0:
+                cell.set_facecolor("#EAF1FA"); cell.set_text_props(fontweight="bold")
+            elif tabla is dum and str(cell.get_text().get_text()) == "1":
+                cell.set_facecolor("#F6D5D1")
+    return _leyenda(fig, "cada fila tiene exactamente un 1: la categoría a la que pertenece. Ninguna categoría "
+                         "queda 'mayor' que otra, que es justo lo que pasaría si las numeráramos 1, 2, 3…")
+
+
+def escalado_antes_despues(X, columnas):
+    """Las mismas variables en sus unidades originales y después de StandardScaler
+    (restar la media y dividir por la desviación estándar)."""
+    from sklearn.preprocessing import StandardScaler
+    d = X[columnas].dropna()
+    z = pd.DataFrame(StandardScaler().fit_transform(d), columns=columnas)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+    axes[0].boxplot([d[c] for c in columnas], vert=False, showfliers=False)
+    axes[0].set_yticks(range(1, len(columnas) + 1)); axes[0].set_yticklabels(columnas)
+    axes[0].set_title("Antes: cada variable en su propia unidad")
+    axes[0].set_xlabel("valor original (años, horas, grados…)")
+    axes[1].boxplot([z[c] for c in columnas], vert=False, showfliers=False)
+    axes[1].set_yticks(range(1, len(columnas) + 1)); axes[1].set_yticklabels(columnas)
+    axes[1].axvline(0, color=ROJO, ls="--", lw=1)
+    axes[1].set_title("Después de StandardScaler: todas en 'desviaciones estándar'")
+    axes[1].set_xlabel("z = (x − media) / desviación")
+    return _leyenda(fig, "a la izquierda `anio` (≈2 020) aplasta a las coordenadas (≈6 y ≈−75); a la derecha "
+                         "todas quedan centradas en 0 con la misma dispersión. La forma de cada caja no cambia.")
+
+
+def vs_linea_base(resultados, titulo="¿Cuánto le gana el modelo a la línea base?"):
+    """resultados = {"nombre del escenario": (accuracy_linea_base, accuracy_modelo), ...}
+    Barras agrupadas; la flecha es lo que de verdad aprendió el modelo."""
+    nombres = list(resultados)
+    base = [resultados[k][0] for k in nombres]; mod = [resultados[k][1] for k in nombres]
+    x = np.arange(len(nombres)); w = 0.36
+    fig, ax = plt.subplots(figsize=(4 + 2.6 * len(nombres), 4.2))
+    ax.bar(x - w / 2, base, w, color=GRIS, label="línea base (siempre la clase mayoritaria)")
+    ax.bar(x + w / 2, mod, w, color=MODULO[1], label="árbol de decisión")
+    for i in range(len(nombres)):
+        ax.text(x[i] - w / 2, base[i] + 0.005, f"{base[i]:.3f}", ha="center", va="bottom", fontsize=9)
+        ax.text(x[i] + w / 2, mod[i] + 0.005, f"{mod[i]:.3f}", ha="center", va="bottom", fontsize=9)
+        ax.annotate("", xy=(x[i] + w / 2 + 0.2, mod[i]), xytext=(x[i] + w / 2 + 0.2, base[i]),
+                    arrowprops=dict(arrowstyle="->", color=ROJO, lw=2))
+        ax.text(x[i] + w / 2 + 0.25, (base[i] + mod[i]) / 2, f"+{(mod[i] - base[i]) * 100:.1f}\npuntos",
+                color=ROJO, va="center", fontsize=9, fontweight="bold")
+    ax.set_xticks(x); ax.set_xticklabels(nombres); ax.set_ylim(min(base) - 0.1, 1)
+    ax.set_ylabel("accuracy en prueba"); ax.legend(loc="upper left", fontsize=8); ax.set_title(titulo)
+    return _leyenda(fig, "no mire la altura de la barra azul sino la flecha roja: eso es lo que el modelo "
+                         "aprendió por encima de adivinar siempre lo mismo.")
