@@ -29,7 +29,7 @@ Aquí está el material del curso. No hay que instalar nada: cada notebook se ab
 | 0 | Antes del curso | Diagnóstico: Python, pandas y estadística básica (20–30 min, sin nota) | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S00/S00_diagnostico.ipynb) |
 | 1 | M1 · Introducción al ML | Qué es ML y el pipeline completo en una clase | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S01/S01_estudiante.ipynb) |
 | 2 | M1 · Introducción al ML | Mirar antes de modelar: datos y preprocesamiento | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S02/S02_estudiante.ipynb) |
-| 3 | M1 · Introducción al ML | Entrenar, probar y no hacerse trampa · **Entrega E1** | próximamente |
+| 3 | M1 · Introducción al ML | Entrenar, probar y no hacerse trampa · **Entrega E1** | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S03/S03_estudiante.ipynb) |
 | 4 | M2 · Supervisado | Regresión lineal y regularización | próximamente |
 | 5 | M2 · Supervisado | Clasificación: regresión logística y k-NN | próximamente |
 | 6 | M2 · Supervisado | Árboles, bosques y métricas · **Entrega E2** | próximamente |

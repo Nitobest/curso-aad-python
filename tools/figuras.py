@@ -429,3 +429,98 @@ def vs_linea_base(resultados, titulo="¿Cuánto le gana el modelo a la línea ba
     ax.set_ylabel("accuracy en prueba"); ax.legend(loc="upper left", fontsize=8); ax.set_title(titulo)
     return _leyenda(fig, "no mire la altura de la barra azul sino la flecha roja: eso es lo que el modelo "
                          "aprendió por encima de adivinar siempre lo mismo.")
+
+
+# ================================================================== S3 — entrenar, probar y no hacerse trampa
+def split_esquema(n_train=0.8, titulo="Separar ANTES de entrenar"):
+    """(A) Esquema de train/test: la tabla se parte en dos; el modelo solo ve la parte azul;
+    la parte roja es el 'examen' que nunca vio."""
+    fig, ax = plt.subplots(figsize=(12, 3.2))
+    ax.set_xlim(0, 10); ax.set_ylim(0, 3.2); ax.axis("off")
+    ax.add_patch(FancyBboxPatch((0.2, 1.6), 9.6 * n_train, 0.9, boxstyle="round,pad=0.02", fc=AZUL, ec="white"))
+    ax.add_patch(FancyBboxPatch((0.2 + 9.6 * n_train, 1.6), 9.6 * (1 - n_train), 0.9, boxstyle="round,pad=0.02", fc=ROJO, ec="white"))
+    ax.text(0.2 + 4.8 * n_train, 2.05, f"ENTRENAMIENTO ({n_train:.0%})\nel modelo aprende aquí: .fit(X_train, y_train)",
+            ha="center", va="center", color="white", fontsize=10, fontweight="bold")
+    ax.text(0.2 + 9.6 * n_train + 4.8 * (1 - n_train), 2.05, f"PRUEBA ({1 - n_train:.0%})\nel 'examen'",
+            ha="center", va="center", color="white", fontsize=10, fontweight="bold")
+    ax.text(0.2 + 4.8 * n_train, 1.15, "Todo lo que el modelo 'aprende' —incluidas medias, tasas o escalas—\nse calcula SOLO con esta parte",
+            ha="center", va="top", fontsize=9.5, color=AZUL)
+    ax.text(0.2 + 9.6 * n_train + 4.8 * (1 - n_train), 1.15, "Se usa una sola vez,\nal final: .score(X_test, y_test)",
+            ha="center", va="top", fontsize=9.5, color=ROJO)
+    ax.set_title(titulo, fontsize=12)
+    return _leyenda(fig, "si algo de la parte roja se filtra a la azul, el examen deja de medir y la nota sale inflada.")
+
+
+def fuga_target_encoding(datos, col, col_y="con_victimas", max_puntos=4000, semilla=1):
+    """(A) Por qué la 'tasa de víctimas por dirección' calculada con TODOS los datos hace trampa:
+    en las direcciones con UNA sola fila, la tasa es exactamente la respuesta de esa fila."""
+    n = datos[col].map(datos[col].value_counts())
+    tasa = datos.groupby(col)[col_y].transform("mean")
+    grupos = pd.cut(n, [0, 1, 2, 5, 20, np.inf], labels=["1 fila", "2", "3–5", "6–20", "más de 20"])
+    acierto = ((tasa >= 0.5).astype(int) == datos[col_y]).groupby(grupos, observed=False).mean() * 100
+    cuantos = grupos.value_counts().reindex(acierto.index)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.2))
+    rng = np.random.default_rng(semilla)
+    uno = datos[n == 1]
+    m = uno.sample(min(max_puntos, len(uno)), random_state=semilla)
+    axes[0].scatter(m[col_y] + rng.normal(0, 0.06, len(m)), tasa.loc[m.index] + rng.normal(0, 0.02, len(m)),
+                    s=6, alpha=0.3, c=np.where(m[col_y] == 1, ROJO, AZUL))
+    axes[0].set_xticks([0, 1]); axes[0].set_xticklabels(["solo daños (y = 0)", "con víctimas (y = 1)"])
+    axes[0].set_ylabel(f"tasa de víctimas de su {col}")
+    axes[0].set_title(f"Las {len(uno):,} filas cuya {col} aparece UNA sola vez")
+    axes[1].bar(acierto.index.astype(str), acierto.values, color=[ROJO] + [GRIS] * (len(acierto) - 1))
+    for i, (a, c) in enumerate(zip(acierto.values, cuantos.values)):
+        axes[1].text(i, a + 1, f"{a:.0f} %\n({c:,} filas)", ha="center", va="bottom", fontsize=8.5)
+    axes[1].set_ylim(0, 115); axes[1].set_xlabel(f"¿cuántas veces aparece la {col}?")
+    axes[1].set_ylabel("% de filas donde 'tasa ≥ 0,5' acierta la y")
+    axes[1].set_title("Entre menos se repite, más 'acierta' la tasa")
+    return _leyenda(fig, "izquierda: cuando la dirección aparece una vez, su tasa ES la respuesta (0 o 1). "
+                         "La variable no describe la calle: le copia la y al modelo.")
+
+
+def fuga_resultados(resultados, linea_base=None):
+    """(B) resultados = {"escenario": (acc_train, acc_test), ...}. Barras de entrenamiento y prueba
+    por escenario; la línea punteada es la línea base."""
+    nombres = list(resultados); x = np.arange(len(nombres)); w = 0.36
+    tr = [resultados[k][0] for k in nombres]; te = [resultados[k][1] for k in nombres]
+    fig, ax = plt.subplots(figsize=(3.2 + 2.9 * len(nombres), 4.4))
+    ax.bar(x - w / 2, tr, w, color=AZUL, alpha=0.55, label="entrenamiento")
+    ax.bar(x + w / 2, te, w, color=ROJO, label="prueba")
+    for i in range(len(nombres)):
+        ax.text(x[i] - w / 2, tr[i] + 0.004, f"{tr[i]:.3f}", ha="center", va="bottom", fontsize=9, color=GRIS)
+        ax.text(x[i] + w / 2, te[i] + 0.004, f"{te[i]:.3f}", ha="center", va="bottom", fontsize=10, fontweight="bold")
+    if linea_base is not None:
+        ax.axhline(linea_base, color=NEGRO, ls=":", lw=1); ax.text(x[-1] + 0.6, linea_base, f"línea base {linea_base:.3f}", va="center", fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(nombres); ax.set_ylim(min(te + [linea_base or 1]) - 0.06, max(tr + te) + 0.04)
+    ax.set_ylabel("accuracy"); ax.legend(loc="upper left"); ax.set_title("La misma variable, calculada de dos formas")
+    return _leyenda(fig, "con fuga, la prueba sube y se parece al entrenamiento: parece un gran hallazgo. Calculada bien, "
+                         "la prueba BAJA y aparece la brecha con el entrenamiento: la variable solo servía para copiar.")
+
+
+def camino_de_una_fila(modelo, fila, columnas, clases=("solo daños", "con víctimas"), max_pasos=8):
+    """(D) El modelo entrenado como FUNCIÓN: una fila real entra, recorre las preguntas del árbol
+    y sale con una predicción. Cada caja es una pregunta; en rojo la respuesta de esta fila."""
+    X1 = pd.DataFrame([fila.values], columns=list(columnas))
+    t = modelo.tree_
+    nodos = modelo.decision_path(X1).indices[:max_pasos + 1]
+    fig, ax = plt.subplots(figsize=(12, 1.1 * len(nodos) + 1.2))
+    ax.set_xlim(0, 12); ax.set_ylim(-0.3, len(nodos) + 0.6); ax.axis("off")
+    activos = [f"{c} = {v:g}" for c, v in zip(columnas, fila.values) if v != 0]
+    ax.text(0.1, len(nodos) + 0.35, "Entra la fila:  " + " · ".join(activos[:8]), fontsize=9.5, color=NEGRO, va="center")
+    for k, nodo in enumerate(nodos):
+        y = len(nodos) - 0.6 - k
+        if t.children_left[nodo] == -1:
+            p = t.value[nodo][0] / t.value[nodo][0].sum()
+            texto = f"HOJA → predice «{clases[int(np.argmax(p))]}»   ({p[1]:.0%} con víctimas entre los casos de entrenamiento que llegaron aquí)"
+            ax.add_patch(FancyBboxPatch((0.6, y - 0.32), 10.8, 0.64, boxstyle="round,pad=0.02", fc=ROJO, ec=ROJO))
+            ax.text(6, y, texto, ha="center", va="center", color="white", fontsize=10, fontweight="bold")
+        else:
+            col = columnas[t.feature[nodo]]; u = t.threshold[nodo]; v = float(fila.iloc[t.feature[nodo]])
+            si = v <= u
+            ax.add_patch(FancyBboxPatch((0.6, y - 0.32), 10.8, 0.64, boxstyle="round,pad=0.02", fc="white", ec=AZUL, lw=1.5))
+            ax.text(1.0, y, f"¿{col} ≤ {u:.2f}?", va="center", fontsize=10, color=NEGRO)
+            ax.text(11.0, y, f"esta fila: {v:g} → {'SÍ' if si else 'NO'}", va="center", ha="right", fontsize=10,
+                    color=ROJO, fontweight="bold")
+            ax.annotate("", xy=(6, y - 0.45), xytext=(6, y - 0.32), arrowprops=dict(arrowstyle="->", color=GRIS))
+    return _leyenda(fig, "el árbol entrenado no es una tabla: es una función. Esta fila contestó estas preguntas, en este orden, "
+                         "y salió por esta hoja. Así se 'explica' una predicción.")
