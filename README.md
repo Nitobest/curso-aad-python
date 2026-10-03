@@ -30,7 +30,7 @@ Aquí está el material del curso. No hay que instalar nada: cada notebook se ab
 | 1 | M1 · Introducción al ML | Qué es ML y el pipeline completo en una clase | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S01/S01_estudiante.ipynb) |
 | 2 | M1 · Introducción al ML | Mirar antes de modelar: datos y preprocesamiento | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S02/S02_estudiante.ipynb) |
 | 3 | M1 · Introducción al ML | Entrenar, probar y no hacerse trampa · **Entrega E1** | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S03/S03_estudiante.ipynb) |
-| 4 | M2 · Supervisado | Regresión lineal y regularización | próximamente |
+| 4 | M2 · Supervisado | Regresión lineal: qué hay dentro del `.fit()` | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S04/S04_estudiante.ipynb) |
 | 5 | M2 · Supervisado | Clasificación: regresión logística y k-NN | próximamente |
 | 6 | M2 · Supervisado | Árboles, bosques y métricas · **Entrega E2** | próximamente |
 | 7 | M3 · No supervisado | K-means y DBSCAN | próximamente |
@@ -64,5 +64,8 @@ df = pd.read_csv('/content/drive/MyDrive/mi_proyecto/datos.csv')   # o pd.read_e
 | Módulo | Dataset | Fuente |
 |---|---|---|
 | M1 | Incidentes viales de Medellín 2019–2025 | Secretaría de Movilidad de Medellín; Sánchez Corredor, Arango Uribe y Correa Álvarez, *Data* (MDPI, 2026). [Mendeley Data, DOI 10.17632/r6g5dfnpgh.1](https://data.mendeley.com/datasets/r6g5dfnpgh/1), licencia CC BY 4.0 |
+
+| M2 (regresión) | Insurance (cargos médicos, EE. UU.) | Lantz, *Machine Learning with R*; PyCaret datasets |
+| M2 (regresión) | Saber 11, Valle del Cauca, 2022 | ICFES — [datos.gov.co, Resultados únicos Saber 11](https://www.datos.gov.co/d/kgxf-xxbe) |
 
 Los datos de los demás módulos se agregan aquí cuando se publique cada sesión.

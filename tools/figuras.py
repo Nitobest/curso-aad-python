@@ -524,3 +524,207 @@ def camino_de_una_fila(modelo, fila, columnas, clases=("solo daños", "con víct
             ax.annotate("", xy=(6, y - 0.45), xytext=(6, y - 0.32), arrowprops=dict(arrowstyle="->", color=GRIS))
     return _leyenda(fig, "el árbol entrenado no es una tabla: es una función. Esta fila contestó estas preguntas, en este orden, "
                          "y salió por esta hoja. Así se 'explica' una predicción.")
+
+
+# ================================================================== M2 · S4 — regresión lineal, descenso de gradiente, regularización
+VERDE = MODULO[2]
+
+
+def _mse(x, y, b0, b1):
+    return np.mean((y - (b0 + b1 * x)) ** 2)
+
+
+def recta_residuales(x, y, malas=((5, 0.0), None), xlabel="x", ylabel="y"):
+    """(A) Dos rectas sobre los mismos puntos: una cualquiera y la de mínimos cuadrados. Los
+    segmentos son los residuales; el título dice la suma de sus cuadrados (lo que se minimiza)."""
+    x = np.asarray(x, float); y = np.asarray(y, float)
+    b1, b0 = np.polyfit(x, y, 1)
+    rectas = [(malas[0][0] if malas[0] else y.mean(), malas[0][1] if malas[0] else 0.0, "una recta cualquiera"),
+              (b0, b1, "la recta de mínimos cuadrados")]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.4), sharey=True)
+    xx = np.linspace(x.min(), x.max(), 50)
+    for ax, (c0, c1, t) in zip(axes, rectas):
+        pred = c0 + c1 * x
+        ax.vlines(x, np.minimum(y, pred), np.maximum(y, pred), color=ROJO, lw=0.8, alpha=0.7)
+        ax.scatter(x, y, s=16, color=GRIS, zorder=3)
+        ax.plot(xx, c0 + c1 * xx, color=VERDE, lw=2.5)
+        ax.set_title(f"{t}\nsuma de residuales² = {np.sum((y - pred) ** 2):,.0f}")
+        ax.set_xlabel(xlabel)
+    axes[0].set_ylabel(ylabel)
+    return _leyenda(fig, "cada línea roja es un error (residual). La regresión lineal elige la recta que hace mínima "
+                         "la suma de esos errores AL CUADRADO.")
+
+
+def superficie_perdida(x, y, b0_rango=None, b1_rango=None, marcar=None):
+    """(A) El 'paisaje' de la pérdida: para cada par (b0, b1) el error cuadrático medio. Es un tazón
+    con un único fondo: ahí está la mejor recta."""
+    x = np.asarray(x, float); y = np.asarray(y, float)
+    b1_opt, b0_opt = np.polyfit(x, y, 1)
+    r0 = b0_rango or (b0_opt - 3 * y.std(), b0_opt + 3 * y.std()); r1 = b1_rango or (b1_opt - 3 * y.std(), b1_opt + 3 * y.std())
+    B0, B1 = np.meshgrid(np.linspace(*r0, 120), np.linspace(*r1, 120))
+    L = np.mean((y[None, None, :] - (B0[..., None] + B1[..., None] * x[None, None, :])) ** 2, axis=2)
+    fig = plt.figure(figsize=(13, 4.8))
+    ax3 = fig.add_subplot(1, 2, 1, projection="3d")
+    ax3.plot_surface(B0, B1, L, cmap="Greens_r", alpha=0.85, linewidth=0)
+    ax3.set_xlabel("b0 (intercepto)"); ax3.set_ylabel("b1 (pendiente)"); ax3.set_zlabel("pérdida (MSE)")
+    ax3.set_title("La pérdida como un tazón")
+    ax = fig.add_subplot(1, 2, 2)
+    cs = ax.contour(B0, B1, L, levels=18, cmap="Greens_r"); ax.clabel(cs, fontsize=7, fmt="%.0f")
+    ax.plot(b0_opt, b1_opt, "*", color=ROJO, ms=16, label=f"mínimo: b0={b0_opt:.1f}, b1={b1_opt:.1f}")
+    for (c0, c1, t) in (marcar or []):
+        ax.plot(c0, c1, "o", color=AZUL); ax.annotate(t, (c0, c1), xytext=(5, 5), textcoords="offset points", fontsize=8)
+    ax.set_xlabel("b0 (intercepto)"); ax.set_ylabel("b1 (pendiente)"); ax.legend(loc="upper right", fontsize=8)
+    ax.set_title("Vista desde arriba: curvas de nivel")
+    return _leyenda(fig, "cada punto del plano es una recta posible; su altura es qué tan mal ajusta. Entrenar = encontrar el fondo.")
+
+
+def _descenso(x, y, eta, pasos, inicio=(0.0, 0.0)):
+    b0, b1 = inicio; tray = [(b0, b1, _mse(x, y, b0, b1))]
+    for _ in range(pasos):
+        r = (b0 + b1 * x) - y
+        b0, b1 = b0 - eta * 2 * r.mean(), b1 - eta * 2 * (r * x).mean()
+        tray.append((b0, b1, _mse(x, y, b0, b1)))
+        if not np.isfinite(tray[-1][2]) or tray[-1][2] > 1e12:
+            break
+    return np.array(tray)
+
+
+def descenso_gradiente_paso_a_paso(x, y, eta=0.1, mostrar=(0, 1, 3, 10, 30, 100), inicio=(0.0, 0.0), xlabel="x", ylabel="y"):
+    """(A) Descenso de gradiente: arriba, la recta en distintos pasos sobre los datos; abajo, el
+    camino sobre las curvas de nivel y la pérdida que baja paso a paso."""
+    x = np.asarray(x, float); y = np.asarray(y, float)
+    tray = _descenso(x, y, eta, max(mostrar), inicio)
+    fig = plt.figure(figsize=(14, 7.5))
+    gs = fig.add_gridspec(2, len(mostrar), height_ratios=[1, 1.15], hspace=0.45)
+    xx = np.linspace(x.min(), x.max(), 30)
+    for j, k in enumerate(mostrar):
+        ax = fig.add_subplot(gs[0, j]); b0, b1, l = tray[min(k, len(tray) - 1)]
+        ax.scatter(x, y, s=6, color=GRIS); ax.plot(xx, b0 + b1 * xx, color=VERDE, lw=2.2)
+        ax.set_title(f"paso {k}\nMSE = {l:,.1f}", fontsize=9); ax.set_xticks([]); ax.set_yticks([])
+    b1o, b0o = np.polyfit(x, y, 1)
+    ax = fig.add_subplot(gs[1, : len(mostrar) // 2])
+    B0, B1 = np.meshgrid(np.linspace(min(tray[:, 0].min(), b0o) - 2, max(tray[:, 0].max(), b0o) + 2, 100),
+                         np.linspace(min(tray[:, 1].min(), b1o) - 2, max(tray[:, 1].max(), b1o) + 2, 100))
+    L = np.mean((y[None, None, :] - (B0[..., None] + B1[..., None] * x[None, None, :])) ** 2, axis=2)
+    ax.contour(B0, B1, L, levels=15, cmap="Greens_r", linewidths=0.8)
+    ax.plot(tray[:, 0], tray[:, 1], "o-", color=ROJO, ms=3, lw=1); ax.plot(b0o, b1o, "*", color=NEGRO, ms=14)
+    ax.set_xlabel("b0"); ax.set_ylabel("b1"); ax.set_title("El camino sobre el tazón (estrella = fondo)")
+    ax = fig.add_subplot(gs[1, len(mostrar) // 2:])
+    ax.plot(tray[:, 2], color=ROJO); ax.set_yscale("log"); ax.set_xlabel("paso"); ax.set_ylabel("MSE (escala log)")
+    ax.set_title(f"La pérdida baja en cada paso (η = {eta})")
+    return _leyenda(fig, "en cada paso se calcula hacia dónde sube el tazón (el gradiente) y se da un pasito en contra. "
+                         "Arriba se ve el efecto: la recta se acomoda sola a los datos.")
+
+
+def learning_rate_efecto(x, y, etas=(0.005, 0.1, 0.9, 1.05), pasos=40, inicio=(0.0, 0.0)):
+    """(C) La perilla del optimizador: la tasa de aprendizaje η. Muy pequeña no llega; adecuada
+    llega; grande zigzaguea; demasiado grande diverge."""
+    x = np.asarray(x, float); y = np.asarray(y, float)
+    b1o, b0o = np.polyfit(x, y, 1)
+    fig, axes = plt.subplots(1, len(etas), figsize=(3.6 * len(etas), 4))
+    for ax, eta in zip(axes, etas):
+        tray = _descenso(x, y, eta, pasos, inicio)
+        span0 = max(abs(b0o) * 1.6, 3); span1 = max(abs(b1o) * 1.6, 3)
+        B0, B1 = np.meshgrid(np.linspace(b0o - span0, b0o + span0, 90), np.linspace(b1o - span1, b1o + span1, 90))
+        L = np.mean((y[None, None, :] - (B0[..., None] + B1[..., None] * x[None, None, :])) ** 2, axis=2)
+        ax.contour(B0, B1, L, levels=14, cmap="Greens_r", linewidths=0.7)
+        t = tray[(np.abs(tray[:, 0] - b0o) < span0 * 1.5) & (np.abs(tray[:, 1] - b1o) < span1 * 1.5)]
+        ax.plot(t[:, 0], t[:, 1], "o-", color=ROJO, ms=3, lw=1); ax.plot(b0o, b1o, "*", color=NEGRO, ms=12)
+        fin = tray[-1, 2]
+        estado = "diverge ✗" if (not np.isfinite(fin) or fin > tray[0, 2]) else ("llega ✓" if fin < _mse(x, y, b0o, b1o) * 1.005 else "no llega aún")
+        ax.set_title(f"η = {eta}  →  {estado}"); ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xlim(b0o - span0, b0o + span0); ax.set_ylim(b1o - span1, b1o + span1)
+    return _leyenda(fig, f"mismos datos, mismo punto de partida, {pasos} pasos. Solo cambia el tamaño del paso: "
+                         "es la perilla del OPTIMIZADOR, no del modelo.")
+
+
+def recta_por_grupo(df, x, y, grupo, modelo, columnas, etiquetas=None):
+    """(B) El modelo lineal entrenado, dibujado sobre los datos: una recta por grupo (las demás
+    variables en su valor típico). Rectas paralelas = el grupo suma una constante."""
+    fig, ax = plt.subplots(figsize=(11, 4.8))
+    colores = [AZUL, ROJO, VERDE, MODULO[3]]
+    base = pd.DataFrame([{c: (df[c].median() if c in df and pd.api.types.is_numeric_dtype(df[c]) else 0) for c in columnas}])
+    xx = np.linspace(df[x].min(), df[x].max(), 50)
+    for i, (g, sub) in enumerate(df.groupby(grupo)):
+        ax.scatter(sub[x], sub[y], s=10, alpha=0.45, color=colores[i % 4], label=(etiquetas or {}).get(g, g))
+        malla = pd.concat([base] * len(xx), ignore_index=True); malla[x] = xx
+        for cc in [c for c in columnas if c.startswith(f"{grupo}_")]:
+            malla[cc] = int(cc == f"{grupo}_{g}")
+        ax.plot(xx, modelo.predict(malla[columnas]), color=colores[i % 4], lw=2.5)
+    ax.set_xlabel(x); ax.set_ylabel(y); ax.legend(title=grupo); ax.set_title("Lo que aprendió el modelo, sobre los datos reales")
+    return _leyenda(fig, "las dos rectas son paralelas: el modelo lineal dice que ser fumador SUMA una cantidad fija, "
+                         "a cualquier edad. La distancia entre rectas es el coeficiente.")
+
+
+def contribuciones_una_fila(modelo, fila, columnas, real=None, unidad="", top=8):
+    """(D) Una fila entra, una predicción sale: intercepto + Σ coeficiente × valor, como una
+    cascada. Se muestran los términos que más aportan."""
+    contrib = pd.Series(modelo.coef_ * fila.values.astype(float), index=list(columnas))
+    contrib = contrib[contrib.abs() > 1e-9]
+    principales = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(top)
+    resto = contrib.sum() - principales.sum()
+    pasos = [("intercepto", modelo.intercept_)] + [(f"{k} = {fila[k]:g}", v) for k, v in principales.items()]
+    if abs(resto) > 1e-9:
+        pasos.append(("resto de variables", resto))
+    fig, ax = plt.subplots(figsize=(11, 0.5 * len(pasos) + 1.8))
+    acum = 0
+    for i, (n, v) in enumerate(pasos):
+        ax.barh(i, v, left=acum if i else 0, color=GRIS if i == 0 else (VERDE if v >= 0 else ROJO))
+        ax.text((acum + v if i else v) + (0.01 * abs(modelo.intercept_) + 1e-9), i, f"{v:+,.0f}{unidad}", va="center", fontsize=8.5)
+        acum = acum + v if i else v
+    ax.barh(len(pasos), acum, color=AZUL); ax.text(acum, len(pasos), f"  predicción = {acum:,.0f}{unidad}", va="center", fontweight="bold")
+    ylabels = [n for n, _ in pasos] + ["PREDICCIÓN"]
+    if real is not None:
+        ax.axvline(real, color=NEGRO, ls="--", lw=1); ax.text(real, -0.8, f"real: {real:,.0f}{unidad}", ha="center", fontsize=8.5)
+    ax.set_yticks(range(len(ylabels))); ax.set_yticklabels(ylabels); ax.invert_yaxis()
+    ax.set_title("Una fila entra, una predicción sale: la suma de las contribuciones")
+    return _leyenda(fig, "cada barra es coeficiente × valor de esa variable para esta persona. Verde suma, rojo resta. "
+                         "Un modelo lineal se explica sumando.")
+
+
+def regularizacion_alpha(X_train, y_train, X_test, y_test, alphas=None, destacar=6):
+    """(C) Ridge y Lasso al subir alpha: cómo se encogen los coeficientes (variables escaladas) y
+    qué pasa con el R² de prueba. Lasso apaga variables; Ridge solo las encoge."""
+    from sklearn.linear_model import Ridge, Lasso
+    from sklearn.preprocessing import StandardScaler
+    sc = StandardScaler().fit(X_train); A, B = sc.transform(X_train), sc.transform(X_test)
+    alphas = alphas if alphas is not None else np.logspace(-2, 1.3, 14)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.4))
+    for ax, (nombre, M, esc) in zip(axes[:2], [("Ridge", Ridge, 100000), ("Lasso", Lasso, 1)]):
+        coefs, r2 = [], []
+        for a in alphas:
+            m = M(alpha=a * esc, max_iter=20000).fit(A, y_train) if nombre == "Ridge" else M(alpha=a, max_iter=20000).fit(A, y_train)
+            coefs.append(m.coef_); r2.append(m.score(B, y_test))
+        C = np.array(coefs)
+        top = np.argsort(-np.abs(C[0]))[:destacar]
+        for j in range(C.shape[1]):
+            ax.plot(alphas * esc if nombre == "Ridge" else alphas, C[:, j], color=GRIS if j not in top else None,
+                    lw=0.6 if j not in top else 2, alpha=0.5 if j not in top else 1,
+                    label=X_train.columns[j][:28] if j in top else None)
+        ax.set_xscale("log"); ax.axhline(0, color=NEGRO, lw=0.6)
+        ax.set_xlabel("alpha (fuerza de la penalización)"); ax.set_ylabel("coeficiente (variables escaladas)")
+        vivos = int((np.abs(C[-1]) > 1e-6).sum())
+        ax.set_title(f"{nombre}: con alpha máximo quedan {vivos} de {C.shape[1]} ≠ 0")
+        if nombre == "Lasso":
+            ax.legend(fontsize=7, loc="upper right")
+        axes[2].plot(alphas * esc if nombre == "Ridge" else alphas, r2, "o-", label=nombre, ms=3,
+                     color=AZUL if nombre == "Ridge" else ROJO)
+    axes[2].set_xscale("log"); axes[2].set_xlabel("alpha"); axes[2].set_ylabel("R² en prueba"); axes[2].legend()
+    axes[2].set_title("¿Cuánto se pierde al simplificar?")
+    return _leyenda(fig, "al subir alpha los coeficientes se encogen hacia 0. Lasso los APAGA uno a uno (selección de "
+                         "variables); Ridge los achica sin apagarlos. A la derecha, el precio en R².")
+
+
+def pred_vs_real(paneles, unidad=""):
+    """paneles = {"título": (y_real, y_pred)}. Diagonal = predicción perfecta."""
+    from sklearn.metrics import r2_score, mean_absolute_error
+    fig, axes = plt.subplots(1, len(paneles), figsize=(5.2 * len(paneles), 4.6), squeeze=False)
+    for ax, (t, (yr, yp)) in zip(axes[0], paneles.items()):
+        yr, yp = np.asarray(yr), np.asarray(yp)
+        idx = np.random.default_rng(0).choice(len(yr), min(4000, len(yr)), replace=False)
+        ax.scatter(yr[idx], yp[idx], s=5, alpha=0.3, color=VERDE)
+        lo, hi = min(yr.min(), yp.min()), max(yr.max(), yp.max()); ax.plot([lo, hi], [lo, hi], color=NEGRO, lw=1, ls="--")
+        ax.set_title(f"{t}\nR² = {r2_score(yr, yp):.3f} · MAE = {mean_absolute_error(yr, yp):.1f}{unidad}")
+        ax.set_xlabel("valor real"); ax.set_ylabel("predicción")
+    return _leyenda(fig, "si los puntos caen sobre la diagonal, el modelo 'acierta' todo. Antes de celebrar, "
+                         "pregunte de dónde salió esa precisión.")
