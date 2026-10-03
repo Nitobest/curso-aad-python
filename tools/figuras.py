@@ -728,3 +728,290 @@ def pred_vs_real(paneles, unidad=""):
         ax.set_xlabel("valor real"); ax.set_ylabel("predicción")
     return _leyenda(fig, "si los puntos caen sobre la diagonal, el modelo 'acierta' todo. Antes de celebrar, "
                          "pregunte de dónde salió esa precisión.")
+
+
+# ================================================================== M2 · S5 — clasificación: logística y k-NN
+def _sigmoide(z):
+    return 1 / (1 + np.exp(-z))
+
+
+def _sinteticos_2c(n=240, semilla=4):
+    """Dos clases en 2 variables escaladas, con traslape (para logística y k-NN)."""
+    rng = np.random.default_rng(semilla)
+    n1 = n // 3
+    a = rng.normal([-0.6, -0.4], 0.9, (n - n1, 2)); b = rng.normal([1.0, 0.9], 0.8, (n1, 2))
+    X = np.vstack([a, b]); y = np.r_[np.zeros(len(a)), np.ones(len(b))].astype(int)
+    return pd.DataFrame(X, columns=["x1", "x2"]), y
+
+
+def sigmoide_vs_recta(n=120, semilla=2):
+    """(A) Una y de sí/no contra una variable: la recta se sale de [0, 1]; la sigmoide no."""
+    rng = np.random.default_rng(semilla)
+    x = rng.uniform(-4, 4, n); y = (rng.uniform(size=n) < _sigmoide(1.6 * x)).astype(int)
+    b1, b0 = np.polyfit(x, y, 1)
+    from sklearn.linear_model import LogisticRegression
+    lg = LogisticRegression().fit(x.reshape(-1, 1), y)
+    xx = np.linspace(-5, 5, 200)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.2), sharey=True)
+    for ax, t in zip(axes, ["Con una recta (regresión lineal)", "Con una sigmoide (regresión logística)"]):
+        ax.scatter(x, y + rng.normal(0, 0.02, n), s=14, c=np.where(y == 1, ROJO, AZUL), alpha=0.7)
+        ax.axhspan(0, 1, color="#F2F2F2", zorder=0); ax.axhline(0.5, color=GRIS, ls=":", lw=1)
+        ax.set_title(t); ax.set_xlabel("x (una variable escalada)"); ax.set_ylim(-0.45, 1.45)
+    axes[0].plot(xx, b0 + b1 * xx, color=VERDE, lw=2.5)
+    axes[0].fill_between(xx, b0 + b1 * xx, 1, where=(b0 + b1 * xx) > 1, color=ROJO, alpha=0.2)
+    axes[0].fill_between(xx, b0 + b1 * xx, 0, where=(b0 + b1 * xx) < 0, color=ROJO, alpha=0.2)
+    axes[0].text(3.2, 1.3, "¿probabilidad > 1?", color=ROJO, ha="center"); axes[0].text(-3.2, -0.35, "¿probabilidad < 0?", color=ROJO, ha="center")
+    axes[1].plot(xx, lg.predict_proba(xx.reshape(-1, 1))[:, 1], color=VERDE, lw=2.5)
+    axes[0].set_ylabel("y  (1 = sí, 0 = no)")
+    return _leyenda(fig, "la recta promete probabilidades imposibles en los extremos. La sigmoide 'dobla' la recta para que "
+                         "siempre quede entre 0 y 1, y cruza 0,5 donde el modelo cambia de opinión.")
+
+
+def frontera_logistica_2d(n=240):
+    """(A) En dos variables, la logística traza una frontera RECTA y pinta la probabilidad a cada lado."""
+    from sklearn.linear_model import LogisticRegression
+    X, y = _sinteticos_2c(n)
+    lg = LogisticRegression().fit(X, y)
+    xx, yy = np.meshgrid(np.linspace(-3.5, 3.5, 200), np.linspace(-3.5, 3.5, 200))
+    P = lg.predict_proba(pd.DataFrame({"x1": xx.ravel(), "x2": yy.ravel()}))[:, 1].reshape(xx.shape)
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    im = ax.contourf(xx, yy, P, levels=np.linspace(0, 1, 11), cmap=CMAP_PROB, alpha=0.75)
+    ax.contour(xx, yy, P, levels=[0.5], colors=NEGRO, linewidths=2)
+    ax.scatter(X["x1"], X["x2"], c=np.where(y == 1, ROJO, AZUL), s=18, edgecolor="white", lw=0.4)
+    fig.colorbar(im, ax=ax, label="probabilidad de 'sí'"); ax.set_xlabel("x1"); ax.set_ylabel("x2")
+    ax.set_title("Regresión logística: frontera recta (línea negra = 50 %)")
+    return _leyenda(fig, "la línea negra es donde p = 0,5. Lejos de ella el modelo está seguro; cerca, duda. La frontera "
+                         "de una logística siempre es recta (en las variables que le damos).")
+
+
+def matrices_confusion(paneles, etiquetas=("no (0)", "sí (1)")):
+    """paneles = {"título": (y_real, y_pred)}. Matriz de confusión con nombres en cada celda y
+    las dos métricas que cuentan historias distintas: accuracy y recall."""
+    from sklearn.metrics import confusion_matrix
+    fig, axes = plt.subplots(1, len(paneles), figsize=(5.3 * len(paneles), 4.6), squeeze=False)
+    nombres = [["verdaderos\nnegativos", "falsos\npositivos"], ["falsos\nnegativos", "verdaderos\npositivos"]]
+    for ax, (t, (yr, yp)) in zip(axes[0], paneles.items()):
+        M = confusion_matrix(yr, yp, labels=[0, 1])
+        ax.imshow([[0, 1], [1, 0]], cmap=ListedColormap(["#EAF4EE", "#F8E1DE"]))
+        for i in range(2):
+            for j in range(2):
+                ax.text(j, i, f"{M[i, j]:,}\n{nombres[i][j]}", ha="center", va="center", fontsize=11,
+                        fontweight="bold" if (i, j) == (1, 1) else "normal")
+        acc = (M[0, 0] + M[1, 1]) / M.sum(); rec = M[1, 1] / max(M[1].sum(), 1)
+        ax.set_xticks([0, 1]); ax.set_xticklabels([f"predice {e}" for e in etiquetas])
+        ax.set_yticks([0, 1]); ax.set_yticklabels([f"real {e}" for e in etiquetas])
+        ax.set_title(f"{t}\naccuracy = {acc:.3f} · recall = {rec:.3f}")
+        for s in ax.spines.values():
+            s.set_visible(False)
+    return _leyenda(fig, "accuracy cuenta los aciertos de las dos filas juntas; recall mira solo la fila de abajo: "
+                         "de los que de verdad dijeron sí, ¿a cuántos encontró el modelo?")
+
+
+def umbral_efecto(y_real, proba, umbrales=None, marcar=(0.5,)):
+    """(C) Mover el umbral de decisión: accuracy, recall y precisión para cada umbral."""
+    from sklearn.metrics import accuracy_score, recall_score, precision_score
+    umbrales = umbrales if umbrales is not None else np.linspace(0.05, 0.8, 31)
+    acc, rec, pre = [], [], []
+    for t in umbrales:
+        p = (proba >= t).astype(int)
+        acc.append(accuracy_score(y_real, p)); rec.append(recall_score(y_real, p)); pre.append(precision_score(y_real, p, zero_division=0))
+    fig, ax = plt.subplots(figsize=(11, 4.4))
+    ax.plot(umbrales, acc, color=NEGRO, lw=2, label="accuracy")
+    ax.plot(umbrales, rec, color=ROJO, lw=2.5, label="recall (de los 'sí', cuántos encuentro)")
+    ax.plot(umbrales, pre, color=AZUL, lw=2, label="precisión (de los que llamo, cuántos dicen sí)")
+    for m in marcar:
+        ax.axvline(m, color=GRIS, ls="--", lw=1); ax.text(m, 1.02, f"umbral {m}", ha="center", fontsize=8, color=GRIS)
+    ax.set_xlabel("umbral: llamo si la probabilidad de 'sí' es ≥ umbral"); ax.set_ylabel("valor"); ax.set_ylim(0, 1.08)
+    ax.legend(loc="center right"); ax.set_title("La misma probabilidad, distintas decisiones")
+    return _leyenda(fig, "con el umbral de 0,5 por defecto el recall es bajísimo. Bajar el umbral encuentra más clientes "
+                         "que dicen sí a cambio de más llamadas en vano: la accuracy casi no se mueve, el negocio sí.")
+
+
+def logistica_una_fila(modelo, fila_z, columnas, real=None, top=7):
+    """(D) Una fila: contribuciones en la escala de los log-odds (z), y z → probabilidad con la sigmoide."""
+    c = pd.Series(modelo.coef_[0] * np.asarray(fila_z, float), index=list(columnas))
+    principales = c.reindex(c.abs().sort_values(ascending=False).index).head(top)
+    resto = c.sum() - principales.sum(); z = modelo.intercept_[0] + c.sum(); p = _sigmoide(z)
+    pasos = [("intercepto", modelo.intercept_[0])] + list(principales.items()) + [("resto de variables", resto)]
+    fig, axes = plt.subplots(1, 2, figsize=(14, 0.42 * len(pasos) + 2.2), gridspec_kw={"width_ratios": [1.6, 1]})
+    ax = axes[0]; acum = 0
+    for i, (n, v) in enumerate(pasos):
+        ax.barh(i, v, left=acum, color=GRIS if i == 0 else (ROJO if v >= 0 else AZUL)); acum += v
+        ax.text(acum, i, f" {v:+.2f}", va="center", fontsize=8)
+    ax.barh(len(pasos), z, color=VERDE); ax.text(z, len(pasos), f"  z = {z:.2f}", va="center", fontweight="bold")
+    ax.set_yticks(range(len(pasos) + 1)); ax.set_yticklabels([n[:34] for n, _ in pasos] + ["SUMA (z)"]); ax.invert_yaxis()
+    ax.axvline(0, color=NEGRO, lw=0.6); ax.set_title("1. Se suman las contribuciones (log-odds)")
+    zz = np.linspace(-6, 6, 200); ax = axes[1]
+    ax.plot(zz, _sigmoide(zz), color=VERDE, lw=2.5); ax.axhline(0.5, color=GRIS, ls=":", lw=1)
+    ax.plot([z, z], [0, p], color=ROJO, ls="--"); ax.plot([zz[0], z], [p, p], color=ROJO, ls="--"); ax.plot(z, p, "o", color=ROJO, ms=9)
+    ax.set_title(f"2. La sigmoide convierte z en probabilidad: {p:.0%}" + (f"\n(lo que pasó: {'sí' if real == 1 else 'no'})" if real is not None else ""))
+    ax.set_xlabel("z"); ax.set_ylabel("probabilidad de 'sí'")
+    return _leyenda(fig, "la logística es una regresión lineal 'doblada': primero suma como en la Sesión 4, después pasa la "
+                         "suma por la sigmoide. Rojo empuja hacia 'sí', azul hacia 'no'.")
+
+
+def knn_vecinos(k=7, n=120, punto=(0.6, 0.2)):
+    """(A) k-NN: un caso nuevo mira a sus k vecinos más cercanos y vota."""
+    X, y = _sinteticos_2c(n, semilla=11)
+    d = np.sqrt(((X.values - np.array(punto)) ** 2).sum(axis=1)); idx = np.argsort(d)[:k]
+    fig, ax = plt.subplots(figsize=(7.5, 5.8))
+    ax.scatter(X["x1"], X["x2"], c=np.where(y == 1, ROJO, AZUL), s=26, alpha=0.35, edgecolor="white")
+    ax.scatter(X.iloc[idx]["x1"], X.iloc[idx]["x2"], c=np.where(y[idx] == 1, ROJO, AZUL), s=70, edgecolor=NEGRO, lw=1.2, zorder=3)
+    for i in idx:
+        ax.plot([punto[0], X.iloc[i]["x1"]], [punto[1], X.iloc[i]["x2"]], color=GRIS, lw=0.8)
+    ax.add_patch(plt.Circle(punto, d[idx[-1]], fill=False, ls="--", color=NEGRO))
+    ax.plot(*punto, "*", ms=22, color=VERDE, markeredgecolor=NEGRO, zorder=4)
+    votos = int(y[idx].sum())
+    ax.set_title(f"k = {k}: {votos} vecinos dicen 'sí' y {k - votos} dicen 'no' → predice «{'sí' if votos > k / 2 else 'no'}»"
+                 f"  (probabilidad {votos / k:.0%})"); ax.set_aspect("equal"); ax.set_xlabel("x1"); ax.set_ylabel("x2")
+    return _leyenda(fig, "k-NN no aprende ninguna fórmula: guarda los datos y, para un caso nuevo, pregunta a los k más "
+                         "parecidos. 'Parecido' = cerca en distancia euclidiana.")
+
+
+def knn_k_efecto(ks=(1, 5, 25, 101), n=300):
+    """(C) La perilla de k-NN: k pequeño = frontera nerviosa (memoriza); k grande = frontera suave."""
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.model_selection import train_test_split
+    X, y = _sinteticos_2c(n, semilla=5)
+    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.3, random_state=0)
+    xx, yy = np.meshgrid(np.linspace(-3.5, 3.5, 150), np.linspace(-3.5, 3.5, 150))
+    malla = pd.DataFrame({"x1": xx.ravel(), "x2": yy.ravel()})
+    fig, axes = plt.subplots(1, len(ks), figsize=(3.7 * len(ks), 4))
+    for ax, k in zip(axes, ks):
+        m = KNeighborsClassifier(k).fit(Xtr, ytr)
+        ax.contourf(xx, yy, m.predict_proba(malla)[:, 1].reshape(xx.shape), levels=np.linspace(0, 1, 11), cmap=CMAP_PROB, alpha=0.7)
+        ax.scatter(Xtr["x1"], Xtr["x2"], c=np.where(ytr == 1, ROJO, AZUL), s=10, edgecolor="white", lw=0.3)
+        ax.set_title(f"k = {k}\ntrain {m.score(Xtr, ytr):.2f} · prueba {m.score(Xte, yte):.2f}"); ax.set_xticks([]); ax.set_yticks([])
+    return _leyenda(fig, "con k = 1 cada punto de entrenamiento se 'defiende' solo (train perfecto: sobreajuste, como el árbol "
+                         "sin límite). Con k grande la frontera se suaviza (y si k se acerca al total de datos, todo se vuelve la clase mayoritaria). k es una perilla del MODELO.")
+
+
+def knn_escala(df, col_x, col_y, k=15, i_punto=0, semilla=0, n=1500):
+    """La misma búsqueda de vecinos con las variables en sus unidades y escaladas. Si una variable
+    tiene una escala enorme, 'cercano' solo significa 'cercano en esa variable'."""
+    d = df[[col_x, col_y]].dropna().sample(min(n, len(df)), random_state=semilla).reset_index(drop=True)
+    Z = (d - d.mean()) / d.std()
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.6))
+    for ax, (datos, t) in zip(axes, [(d, "Sin escalar"), (Z, "Escalado (z)")]):
+        dist = np.sqrt(((datos.values - datos.values[i_punto]) ** 2).sum(axis=1)); idx = np.argsort(dist)[1:k + 1]
+        ax.scatter(d[col_x], d[col_y], s=6, color=GRIS, alpha=0.4)
+        ax.scatter(d.iloc[idx][col_x], d.iloc[idx][col_y], s=40, color=ROJO, edgecolor=NEGRO, lw=0.5)
+        ax.plot(d.iloc[i_punto][col_x], d.iloc[i_punto][col_y], "*", ms=20, color=VERDE, markeredgecolor=NEGRO)
+        ax.set_xlabel(col_x); ax.set_ylabel(col_y); ax.set_title(f"{t}: los {k} vecinos del cliente ★")
+        ax.set_ylim(d[col_y].quantile(0.01), d[col_y].quantile(0.99))
+    return _leyenda(fig, f"sin escalar, {col_y} (miles) aplasta a {col_x} (decenas): los 'vecinos' tienen cualquier edad. "
+                         "Escalado, los vecinos se parecen en las dos cosas.")
+
+
+# ================================================================== M2 · S6 — árboles, bosques, F1 y ROC
+def arbol_vs_bosque(n=300, n_arboles=(1, 2, 3), semilla=3):
+    """(A) Un árbol profundo es nervioso; cada árbol del bosque ve una muestra distinta (bootstrap)
+    y se equivoca distinto; el promedio de muchos es suave."""
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.ensemble import RandomForestClassifier
+    X, y = _sinteticos_2c(n, semilla=semilla)
+    xx, yy = np.meshgrid(np.linspace(-3.5, 3.5, 150), np.linspace(-3.5, 3.5, 150))
+    malla = pd.DataFrame({"x1": xx.ravel(), "x2": yy.ravel()})
+    rf = RandomForestClassifier(200, random_state=0, max_features=1).fit(X, y)
+    paneles = [("un árbol sin límite", DecisionTreeClassifier(random_state=0).fit(X, y))]
+    paneles += [(f"árbol {k} del bosque\n(muestra bootstrap)", rf.estimators_[k - 1]) for k in n_arboles]
+    paneles += [("el bosque: promedio\nde 200 árboles", rf)]
+    fig, axes = plt.subplots(1, len(paneles), figsize=(3.4 * len(paneles), 3.9))
+    for ax, (t, m) in zip(axes, paneles):
+        P = m.predict_proba(malla.values if m is not rf and m is not paneles[0][1] else malla)[:, 1].reshape(xx.shape)
+        ax.contourf(xx, yy, P, levels=np.linspace(0, 1, 11), cmap=CMAP_PROB, alpha=0.75)
+        ax.scatter(X["x1"], X["x2"], c=np.where(y == 1, ROJO, AZUL), s=7, edgecolor="white", lw=0.2)
+        ax.set_title(t, fontsize=10); ax.set_xticks([]); ax.set_yticks([])
+    return _leyenda(fig, "cada árbol solo memoriza su propia muestra y se equivoca a su manera; al promediarlos, los "
+                         "errores se cancelan y queda una frontera suave. Eso es un bosque aleatorio.")
+
+
+def complejidad_auc(X_tr, y_tr, X_te, y_te, profundidades=(2, 4, 6, 8, 12, 16, None), n_arboles=150):
+    """(C) AUC de entrenamiento y prueba de un árbol y de un bosque, para cada max_depth."""
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import roc_auc_score
+    et = [str(d) if d else "sin límite" for d in profundidades]
+    r = {"árbol train": [], "árbol prueba": [], "bosque train": [], "bosque prueba": []}
+    for d in profundidades:
+        for nombre, m in (("árbol", DecisionTreeClassifier(max_depth=d, random_state=42)),
+                          ("bosque", RandomForestClassifier(n_arboles, max_depth=d, random_state=42, n_jobs=-1))):
+            m.fit(X_tr, y_tr)
+            r[f"{nombre} train"].append(roc_auc_score(y_tr, m.predict_proba(X_tr)[:, 1]))
+            r[f"{nombre} prueba"].append(roc_auc_score(y_te, m.predict_proba(X_te)[:, 1]))
+    fig, ax = plt.subplots(figsize=(11, 4.5)); xs = np.arange(len(profundidades))
+    ax.plot(xs, r["árbol train"], "o--", color=AZUL, alpha=0.6, label="un árbol · entrenamiento")
+    ax.plot(xs, r["árbol prueba"], "o-", color=AZUL, lw=2.5, label="un árbol · prueba")
+    ax.plot(xs, r["bosque train"], "s--", color=VERDE, alpha=0.6, label="bosque · entrenamiento")
+    ax.plot(xs, r["bosque prueba"], "s-", color=VERDE, lw=2.5, label="bosque · prueba")
+    ax.set_xticks(xs); ax.set_xticklabels(et); ax.set_xlabel("max_depth"); ax.set_ylabel("AUC")
+    ax.legend(loc="lower left"); ax.set_title("Más profundo: el árbol se desploma en prueba; el bosque no")
+    return _leyenda(fig, "las líneas punteadas (entrenamiento) suben siempre. Lo que importa son las sólidas: el árbol "
+                         "solo empeora al crecer; el bosque aguanta porque promedia árboles que se equivocan distinto.")
+
+
+def roc_explicada(y_real, proba, umbrales=(0.7, 0.5, 0.3, 0.2, 0.1)):
+    """La curva ROC sale de mover el umbral (Sesión 5): cada umbral es un punto
+    (falsos positivos, verdaderos positivos)."""
+    from sklearn.metrics import roc_curve, roc_auc_score
+    fpr, tpr, thr = roc_curve(y_real, proba)
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.fill_between(fpr, tpr, color=VERDE, alpha=0.12)
+    ax.plot(fpr, tpr, color=VERDE, lw=2.5, label=f"modelo (AUC = {roc_auc_score(y_real, proba):.3f})")
+    ax.plot([0, 1], [0, 1], color=GRIS, ls="--", label="azar (AUC = 0,5)")
+    for u in umbrales:
+        p = proba >= u; tp = (p & (np.asarray(y_real) == 1)).sum() / (np.asarray(y_real) == 1).sum()
+        fp = (p & (np.asarray(y_real) == 0)).sum() / (np.asarray(y_real) == 0).sum()
+        ax.plot(fp, tp, "o", color=ROJO, ms=8); ax.annotate(f"umbral {u}", (fp, tp), xytext=(8, -12), textcoords="offset points", fontsize=8.5)
+    ax.set_xlabel("tasa de falsos positivos (de los 'no', a cuántos llamo en vano)")
+    ax.set_ylabel("tasa de verdaderos positivos = recall"); ax.legend(loc="lower right"); ax.set_aspect("equal")
+    ax.set_title("La curva ROC: todos los umbrales a la vez")
+    return _leyenda(fig, "cada punto rojo es un umbral de la Sesión 5. El área bajo la curva (AUC) resume todos los umbrales: "
+                         "es la probabilidad de que el modelo ponga a un 'sí' por encima de un 'no'.")
+
+
+def curvas_roc(modelos, y_real):
+    """modelos = {"nombre": probabilidades}. Varias curvas ROC en el mismo plano."""
+    from sklearn.metrics import roc_curve, roc_auc_score
+    colores = [GRIS, AZUL, VERDE, ROJO, MODULO[3], MODULO[4]]
+    fig, ax = plt.subplots(figsize=(7, 6))
+    for (n, p), c in zip(modelos.items(), colores):
+        f, t, _ = roc_curve(y_real, p); ax.plot(f, t, color=c, lw=2.2, label=f"{n} · AUC {roc_auc_score(y_real, p):.3f}")
+    ax.plot([0, 1], [0, 1], color=GRIS, ls=":", lw=1)
+    ax.set_xlabel("tasa de falsos positivos"); ax.set_ylabel("recall"); ax.legend(loc="lower right", fontsize=8.5)
+    ax.set_aspect("equal"); ax.set_title("¿Qué modelo ordena mejor a los clientes?")
+    return _leyenda(fig, "la curva más arriba y a la izquierda gana en TODOS los umbrales. El AUC permite comparar modelos "
+                         "sin haber elegido todavía el umbral.")
+
+
+def importancias(modelo, columnas, top=12, titulo="¿Qué variables usa el bosque?"):
+    s = pd.Series(modelo.feature_importances_, index=list(columnas)).sort_values().tail(top)
+    fig, ax = plt.subplots(figsize=(9, 0.38 * top + 1.2))
+    ax.barh(s.index, s.values, color=VERDE); ax.set_xlabel("importancia (reducción de Gini, suma 1)"); ax.set_title(titulo)
+    return _leyenda(fig, "importancia = cuánto ayudó cada variable a purificar los cortes, sumado en todos los árboles. "
+                         "Dice qué USA el modelo, no qué CAUSA el resultado.")
+
+
+def bosque_una_fila(bosque, fila, real=None):
+    """(D) Una fila entra al bosque: cada árbol da su probabilidad; el bosque las promedia."""
+    votos = np.array([t.predict_proba(np.asarray(fila, float).reshape(1, -1))[0, 1] for t in bosque.estimators_])
+    fig, ax = plt.subplots(figsize=(11, 3.8))
+    ax.hist(votos, bins=np.linspace(0, 1, 21), color=VERDE, edgecolor="white")
+    ax.axvline(votos.mean(), color=ROJO, lw=2.5); ax.axvline(0.5, color=GRIS, ls="--")
+    ax.text(votos.mean(), ax.get_ylim()[1] * 0.92, f"  promedio = {votos.mean():.2f}", color=ROJO, fontweight="bold")
+    ax.set_xlabel("probabilidad de 'sí' que da cada árbol"); ax.set_ylabel("número de árboles")
+    ax.set_title(f"Los {len(votos)} árboles opinan sobre el mismo cliente" + (f" (lo que pasó: {'sí' if real == 1 else 'no'})" if real is not None else ""))
+    return _leyenda(fig, "ningún árbol decide solo: el bosque promedia sus opiniones. Si los árboles están muy divididos, "
+                         "la predicción es poco segura aunque el promedio cruce el umbral.")
+
+
+def distribucion_por_clase(df, col, col_y, etiquetas=("no", "sí"), recorte=0.98, unidad=""):
+    """Histograma de una variable separada por la clase de la y (para ver si 'predice demasiado')."""
+    lim = df[col].quantile(recorte)
+    fig, ax = plt.subplots(figsize=(11, 4))
+    for v, c, e in ((0, AZUL, etiquetas[0]), (1, ROJO, etiquetas[1])):
+        s = df.loc[df[col_y] == v, col]
+        ax.hist(s.clip(upper=lim), bins=50, alpha=0.55, color=c, density=True, label=f"{e} · mediana {s.median():.0f}{unidad}")
+    ax.set_xlabel(col); ax.set_ylabel("densidad"); ax.legend(); ax.set_title(f"{col} según la respuesta")
+    return _leyenda(fig, "las dos distribuciones se separan mucho más que con cualquier otra variable (la última barra junta todo lo que pasa del percentil 98). "
+                         "Antes de usarla, la pregunta de la Sesión 3: ¿la tendría antes de conocer la y?")
