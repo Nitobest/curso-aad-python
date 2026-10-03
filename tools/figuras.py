@@ -1015,3 +1015,265 @@ def distribucion_por_clase(df, col, col_y, etiquetas=("no", "sí"), recorte=0.98
     ax.set_xlabel(col); ax.set_ylabel("densidad"); ax.legend(); ax.set_title(f"{col} según la respuesta")
     return _leyenda(fig, "las dos distribuciones se separan mucho más que con cualquier otra variable (la última barra junta todo lo que pasa del percentil 98). "
                          "Antes de usarla, la pregunta de la Sesión 3: ¿la tendría antes de conocer la y?")
+
+
+# ================================================================== M3 · S7 — K-means y DBSCAN
+NARANJA = MODULO[3]
+COLORES_CLUSTER = [AZUL, ROJO, "#2C8C5B", NARANJA, "#7A4DB8", "#8C6D46", "#D45E9E", "#4BA3A8"]
+
+
+def _col_cluster(etiquetas):
+    """Color por cluster; el ruido de DBSCAN (-1) va en gris claro."""
+    etiquetas = np.asarray(etiquetas)
+    return np.array([("#C8C8C8" if e < 0 else COLORES_CLUSTER[int(e) % len(COLORES_CLUSTER)]) for e in etiquetas])
+
+
+def _xy(X):
+    X = pd.DataFrame(X)
+    return X.iloc[:, 0].values, X.iloc[:, 1].values, list(X.columns[:2])
+
+
+def puntos_sin_color(X, titulo="¿Cuántos grupos ve?"):
+    """Los datos SIN etiqueta: la pregunta del aprendizaje no supervisado."""
+    x, y, (cx, cy) = _xy(X)
+    fig, ax = plt.subplots(figsize=(6.8, 5.2))
+    ax.scatter(x, y, s=18, color=GRIS, alpha=0.75, edgecolor="white", lw=0.3)
+    ax.set_xlabel(cx); ax.set_ylabel(cy); ax.set_title(titulo)
+    return _leyenda(fig, "no hay columna y: nadie nos dice a qué grupo pertenece cada punto. Su ojo ya está "
+                         "haciendo clustering; el algoritmo tiene que hacerlo con una regla explícita.")
+
+
+def _lloyd(X, k, semilla, pasos):
+    """K-means escrito a mano (algoritmo de Lloyd) guardando cada estado intermedio."""
+    rng = np.random.default_rng(semilla)
+    C = X[rng.choice(len(X), k, replace=False)].astype(float)
+    estados = []
+    for _ in range(pasos):
+        d = ((X[:, None, :] - C[None, :, :]) ** 2).sum(axis=2)
+        lab = d.argmin(axis=1)
+        inercia = d[np.arange(len(X)), lab].sum()
+        nuevos = np.array([X[lab == j].mean(axis=0) if (lab == j).any() else C[j] for j in range(k)])
+        estados.append((C.copy(), lab, inercia, nuevos))
+        if np.allclose(nuevos, C):
+            break
+        C = nuevos
+    return estados
+
+
+def kmeans_iteraciones(X, k=4, semilla=3, mostrar=(0, 1, 2, -1)):
+    """(A) K-means paso a paso: centroides al azar → cada punto al más cercano → cada centroide
+    al promedio de sus puntos → repetir hasta que nada cambie."""
+    Xv = np.asarray(pd.DataFrame(X).iloc[:, :2], float)
+    _, _, (cx, cy) = _xy(X)
+    est = _lloyd(Xv, k, semilla, 50)
+    idx = [i if i >= 0 else len(est) + i for i in mostrar]
+    fig, axes = plt.subplots(1, len(idx), figsize=(3.9 * len(idx), 4.1), sharex=True, sharey=True)
+    for ax, i in zip(axes, idx):
+        C, lab, iner, nuevos = est[i]
+        ax.scatter(Xv[:, 0], Xv[:, 1], c=_col_cluster(lab), s=12, alpha=0.75, edgecolor="white", lw=0.2)
+        ax.scatter(C[:, 0], C[:, 1], marker="X", s=230, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.6, zorder=4)
+        if i < len(est) - 1:
+            for a, b in zip(C, nuevos):
+                ax.annotate("", xy=b, xytext=a, arrowprops=dict(arrowstyle="->", color=NEGRO, lw=1.6))
+        etapa = "inicio: centroides al azar" if i == 0 else ("final: ya no se mueven" if i == len(est) - 1 else f"iteración {i}")
+        ax.set_title(f"{etapa}\ninercia = {iner:,.0f}", fontsize=10)
+        ax.set_xlabel(cx)
+    axes[0].set_ylabel(cy)
+    plt.tight_layout()
+    return _leyenda(fig, "dos pasos que se repiten: (1) cada punto toma el color de su centroide ✖ más cercano; "
+                         "(2) cada centroide se muda (flecha) al promedio de sus puntos. La inercia solo puede bajar.")
+
+
+def kmeans_resultado(X, modelo, titulo=None):
+    """(B) Lo que aprendió K-means: k centroides y una región (celda) por centroide."""
+    Xd = pd.DataFrame(X)
+    x, y, (cx, cy) = _xy(Xd)
+    xx, yy = np.meshgrid(np.linspace(x.min() - 0.5, x.max() + 0.5, 300), np.linspace(y.min() - 0.5, y.max() + 0.5, 300))
+    malla = pd.DataFrame(np.c_[xx.ravel(), yy.ravel()], columns=Xd.columns[:2])
+    z = modelo.predict(malla).reshape(xx.shape)
+    k = modelo.n_clusters
+    fig, ax = plt.subplots(figsize=(7, 5.4))
+    ax.contourf(xx, yy, z, levels=np.arange(-0.5, k), colors=COLORES_CLUSTER[:k], alpha=0.13)
+    ax.scatter(x, y, c=_col_cluster(modelo.labels_), s=16, edgecolor="white", lw=0.3)
+    C = modelo.cluster_centers_
+    ax.scatter(C[:, 0], C[:, 1], marker="X", s=260, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.6, zorder=4)
+    ax.set_xlabel(cx); ax.set_ylabel(cy)
+    ax.set_title(titulo or f"K-means con k = {k} · inercia {modelo.inertia_:,.0f}")
+    return _leyenda(fig, "cada región de color es 'todo lo que queda más cerca de ese centroide que de los demás'. "
+                         "Las fronteras son rectas: K-means siempre parte el plano en polígonos.")
+
+
+def kmeans_k_efecto(X, ks=(2, 3, 4, 6), semilla=42):
+    """(C) La perilla de K-means: k. El algoritmo entrega exactamente los grupos que se le piden."""
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_score
+    x, y, (cx, cy) = _xy(X)
+    fig, axes = plt.subplots(1, len(ks), figsize=(3.8 * len(ks), 3.9), sharex=True, sharey=True)
+    for ax, k in zip(axes, ks):
+        m = KMeans(k, n_init=10, random_state=semilla).fit(X)
+        ax.scatter(x, y, c=_col_cluster(m.labels_), s=10, edgecolor="white", lw=0.2)
+        ax.scatter(*m.cluster_centers_[:, :2].T, marker="X", s=150, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.2)
+        ax.set_title(f"k = {k}\ninercia {m.inertia_:,.0f} · silueta {silhouette_score(X, m.labels_):.2f}", fontsize=10)
+        ax.set_xlabel(cx)
+    axes[0].set_ylabel(cy)
+    plt.tight_layout()
+    return _leyenda(fig, "K-means nunca dice 'no hay grupos' ni 'son 4': entrega exactamente k. Con k de más parte grupos "
+                         "reales en pedazos; con k de menos junta grupos distintos.")
+
+
+def codo_silueta(X, ks=range(1, 10), semilla=42, marcar=None):
+    """Dos ayudas para elegir k: la inercia (baja siempre) y la silueta (más alta = grupos mejor separados)."""
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_score
+    ks = list(ks); iner, sil = [], []
+    for k in ks:
+        m = KMeans(k, n_init=10, random_state=semilla).fit(X)
+        iner.append(m.inertia_); sil.append(silhouette_score(X, m.labels_) if k > 1 else np.nan)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 3.9))
+    axes[0].plot(ks, iner, "o-", color=NARANJA, lw=2); axes[0].set_xlabel("k"); axes[0].set_ylabel("inercia")
+    axes[0].set_title("El 'codo': la inercia SIEMPRE baja al subir k")
+    axes[1].plot(ks, sil, "o-", color=NEGRO, lw=2); axes[1].set_xlabel("k"); axes[1].set_ylabel("silueta promedio")
+    axes[1].set_title("La silueta: ¿qué tan bien separados quedan?")
+    if marcar:
+        for ax in axes:
+            ax.axvline(marcar, color=ROJO, ls="--", lw=1.2)
+    plt.tight_layout()
+    return _leyenda(fig, "no se elige el k de menor inercia (sería k = n, un grupo por punto). Se busca el codo, donde "
+                         "agregar un grupo deja de ayudar mucho, y se mira la silueta. Son pistas, no veredictos.")
+
+
+def kmeans_semillas(X, k=4, semillas=(0, 1, 2, 3)):
+    """Con una sola inicialización al azar, K-means puede quedarse en un mínimo local distinto según la semilla."""
+    from sklearn.cluster import KMeans
+    x, y, (cx, cy) = _xy(X)
+    fig, axes = plt.subplots(1, len(semillas), figsize=(3.8 * len(semillas), 3.9), sharex=True, sharey=True)
+    for ax, s in zip(axes, semillas):
+        m = KMeans(k, init="random", n_init=1, random_state=s).fit(X)
+        ax.scatter(x, y, c=_col_cluster(m.labels_), s=10, edgecolor="white", lw=0.2)
+        ax.scatter(*m.cluster_centers_[:, :2].T, marker="X", s=150, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.2)
+        ax.set_title(f"semilla {s} · n_init=1\ninercia {m.inertia_:,.0f}", fontsize=10); ax.set_xlabel(cx)
+    axes[0].set_ylabel(cy)
+    plt.tight_layout()
+    return _leyenda(fig, "mismos datos, mismo k, distinto punto de partida: a veces termina en una solución peor (inercia "
+                         "más alta). Por eso n_init=10 corre 10 arranques y se queda con el de menor inercia.")
+
+
+def dbscan_idea(X, eps=0.5, min_samples=5, ejemplos=3, semilla=0):
+    """(A) DBSCAN: un punto es NÚCLEO si tiene al menos min_samples vecinos a distancia ≤ eps; los
+    núcleos que se tocan forman un cluster; lo que no alcanza ningún núcleo es RUIDO."""
+    from sklearn.cluster import DBSCAN
+    Xv = np.asarray(pd.DataFrame(X).iloc[:, :2], float)
+    _, _, (cx, cy) = _xy(X)
+    m = DBSCAN(eps=eps, min_samples=min_samples).fit(Xv)
+    nucleo = np.zeros(len(Xv), bool); nucleo[m.core_sample_indices_] = True
+    ruido = m.labels_ == -1; borde = ~nucleo & ~ruido
+    fig, ax = plt.subplots(figsize=(7.5, 5.8))
+    col = _col_cluster(m.labels_)
+    ax.scatter(Xv[nucleo, 0], Xv[nucleo, 1], c=col[nucleo], s=34, edgecolor="white", lw=0.4, label="núcleo")
+    ax.scatter(Xv[borde, 0], Xv[borde, 1], facecolor="white", edgecolor=col[borde], s=34, lw=1.5, label="borde")
+    ax.scatter(Xv[ruido, 0], Xv[ruido, 1], marker="x", color=NEGRO, s=34, lw=1.3, label="ruido")
+    rng = np.random.default_rng(semilla)
+    for tipo, mask in (("núcleo", nucleo), ("borde", borde), ("ruido", ruido)):
+        if mask.any():
+            i = rng.choice(np.where(mask)[0])
+            ax.add_patch(plt.Circle(Xv[i], eps, fill=False, ls="--", color=NEGRO, lw=1.2))
+            n = int((np.sqrt(((Xv - Xv[i]) ** 2).sum(1)) <= eps).sum())
+            ax.annotate(f"{tipo}: {n} vecinos en ε", Xv[i], xytext=(12, 12), textcoords="offset points", fontsize=9,
+                        bbox=dict(boxstyle="round", fc="white", ec=GRIS))
+    ax.set_aspect("equal"); ax.set_xlabel(cx); ax.set_ylabel(cy); ax.legend(loc="lower right")
+    k = len(set(m.labels_)) - (1 if ruido.any() else 0)
+    ax.set_title(f"DBSCAN (ε = {eps}, min_samples = {min_samples}): {k} clusters y {ruido.sum()} puntos de ruido")
+    return _leyenda(fig, "DBSCAN no recibe k: busca zonas densas. Círculo de radio ε alrededor de cada punto; si adentro hay "
+                         "al menos min_samples puntos, es núcleo. Los núcleos encadenados son un cluster; lo suelto es ruido.")
+
+
+def dbscan_eps(X, epsilons=(0.1, 0.2, 0.3, 0.6), min_samples=5):
+    """(C) La perilla de DBSCAN: ε. Muy pequeño = todo es ruido; muy grande = todo es un solo grupo."""
+    from sklearn.cluster import DBSCAN
+    x, y, (cx, cy) = _xy(X)
+    fig, axes = plt.subplots(1, len(epsilons), figsize=(3.8 * len(epsilons), 3.9), sharex=True, sharey=True)
+    for ax, e in zip(axes, epsilons):
+        lab = DBSCAN(eps=e, min_samples=min_samples).fit_predict(X)
+        k = len(set(lab)) - (1 if -1 in lab else 0)
+        ax.scatter(x, y, c=_col_cluster(lab), s=10, edgecolor="white", lw=0.2)
+        ax.set_title(f"ε = {e}\n{k} clusters · {np.sum(lab == -1)} de ruido", fontsize=10); ax.set_xlabel(cx)
+    axes[0].set_ylabel(cy)
+    plt.tight_layout()
+    return _leyenda(fig, "ε es 'qué tan cerca es cerca'. Muy pequeño: casi nadie tiene vecinos y todo es ruido (gris). "
+                         "Muy grande: todo se encadena en un solo grupo. Y depende de la escala de las variables.")
+
+
+def kmeans_vs_dbscan(X, k=2, eps=0.2, min_samples=5):
+    """Formas que K-means no puede ver (lunas): K-means corta con rectas; DBSCAN sigue la densidad."""
+    from sklearn.cluster import KMeans, DBSCAN
+    x, y, (cx, cy) = _xy(X)
+    km = KMeans(k, n_init=10, random_state=0).fit(X); db = DBSCAN(eps=eps, min_samples=min_samples).fit(X)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.3), sharey=True)
+    axes[0].scatter(x, y, c=_col_cluster(km.labels_), s=14, edgecolor="white", lw=0.3)
+    axes[0].scatter(*km.cluster_centers_[:, :2].T, marker="X", s=220, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.5)
+    axes[0].set_title(f"K-means (k = {k}): parte con una recta")
+    n_db = len(set(db.labels_)) - (1 if -1 in db.labels_ else 0)
+    axes[1].scatter(x, y, c=_col_cluster(db.labels_), s=14, edgecolor="white", lw=0.3)
+    axes[1].set_title(f"DBSCAN (ε = {eps}): {n_db} grupos que siguen la forma")
+    for ax in axes:
+        ax.set_xlabel(cx)
+    axes[0].set_ylabel(cy)
+    return _leyenda(fig, "K-means supone grupos 'redondos' alrededor de un centro, así que corta las lunas por la mitad. "
+                         "DBSCAN no supone forma: encadena puntos densos y sigue la curva.")
+
+
+def tabla_cruzada(real, clusters, titulo="¿Qué especie cayó en cada cluster?", etiqueta_real="especie"):
+    """Mapa de calor de la tabla cruzada etiqueta real × cluster (la etiqueta NO se usó para agrupar)."""
+    t = pd.crosstab(pd.Series(real, name=etiqueta_real), pd.Series(clusters, name="cluster"))
+    fig, ax = plt.subplots(figsize=(1.15 * t.shape[1] + 2.4, 0.5 * t.shape[0] + 1.3))
+    ax.imshow(t.values, cmap=LinearSegmentedColormap.from_list("n", ["white", NARANJA]), aspect="auto")
+    for i in range(t.shape[0]):
+        for j in range(t.shape[1]):
+            ax.text(j, i, t.values[i, j], ha="center", va="center", fontsize=12,
+                    fontweight="bold" if t.values[i, j] == t.values[:, j].max() and t.values[i, j] > 0 else "normal")
+    ax.set_xticks(range(t.shape[1])); ax.set_xticklabels([f"cluster {c}" for c in t.columns])
+    ax.set_yticks(range(t.shape[0])); ax.set_yticklabels(t.index)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    pureza = t.max(axis=0).sum() / t.values.sum()
+    ax.set_title(f"{titulo}\npureza = {pureza:.0%}", fontsize=11)
+    return _leyenda(fig, "las especies NO se usaron para agrupar: se miran después, para ver si los grupos que encontró "
+                         "el algoritmo coinciden con algo real. Pureza = % de puntos que están en el cluster de su mayoría.")
+
+
+def clusters_por_unidad(df, col_x, col_y, lab_crudo, lab_escalado):
+    """💥 El mismo K-means sin escalar y escalado, dibujado en dos variables: sin escalar, los grupos
+    son franjas de la variable con números grandes."""
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), sharey=True)
+    for ax, lab, t in ((axes[0], lab_crudo, "Sin escalar"), (axes[1], lab_escalado, "Escalado (z)")):
+        ax.scatter(df[col_x], df[col_y], c=_col_cluster(lab), s=22, edgecolor="white", lw=0.3)
+        ax.set_xlabel(col_x); ax.set_title(f"{t}: K-means con k = {len(set(lab))}")
+    axes[0].set_ylabel(col_y)
+    return _leyenda(fig, f"sin escalar, los clusters son franjas verticales de {col_x}: K-means mide distancias y una "
+                         "diferencia de 500 g pesa muchísimo más que una de 5 mm. Escalado, cada variable pesa parecido.")
+
+
+def kmeans_una_fila(paneles, columnas):
+    """(D) Una fila entra a K-means: distancia² a cada centroide, partida por variable; gana el más corto.
+    paneles = [(titulo, centros, fila), ...] — p. ej. el mismo pingüino sin escalar y escalado."""
+    colores = [AZUL, ROJO, "#2C8C5B", NARANJA, "#7A4DB8", GRIS]
+    n = len(paneles); k = len(paneles[0][1])
+    fig, axes = plt.subplots(1, n, figsize=(6.6 * n, 0.65 * k + 2.0))
+    axes = np.atleast_1d(axes)
+    for ax, (titulo, centros, fila) in zip(axes, paneles):
+        centros = np.asarray(centros, float); fila = np.asarray(fila, float)
+        aportes = (centros - fila) ** 2; total = aportes.sum(axis=1); gana = int(total.argmin())
+        izq = np.zeros(len(centros))
+        for v in range(len(columnas)):
+            ax.barh(range(len(centros)), aportes[:, v], left=izq, color=colores[v % len(colores)], label=columnas[v], edgecolor="white")
+            izq += aportes[:, v]
+        fmt = (lambda t: f"{t:,.0f}") if total.max() > 1000 else (lambda t: f"{t:.2f}")
+        for j, t in enumerate(total):
+            ax.text(t, j, "  " + fmt(t) + ("  ← gana" if j == gana else ""), va="center", fontweight="bold" if j == gana else "normal", fontsize=9)
+        ax.set_yticks(range(len(centros))); ax.set_yticklabels([f"cluster {j}" for j in range(len(centros))]); ax.invert_yaxis()
+        ax.set_xlim(0, total.max() * 1.45); ax.set_title(titulo); ax.set_xlabel("distancia² al centroide")
+        ax.ticklabel_format(axis="x", style="plain") if total.max() > 1000 else None
+    axes[-1].legend(loc="lower right", fontsize=8.5)
+    plt.tight_layout()
+    return _leyenda(fig, "K-means asigna midiendo la distancia a cada centroide y escogiendo la más corta. Los colores "
+                         "muestran cuánto aporta cada variable: si una sola llena la barra, ella sola decide el grupo.")

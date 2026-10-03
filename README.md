@@ -33,7 +33,7 @@ Aquí está el material del curso. No hay que instalar nada: cada notebook se ab
 | 4 | M2 · Supervisado | Regresión lineal: qué hay dentro del `.fit()` | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S04/S04_estudiante.ipynb) |
 | 5 | M2 · Supervisado | Clasificación: logística, k-NN… y el accuracy que miente | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S05/S05_estudiante.ipynb) |
 | 6 | M2 · Supervisado | Árboles y bosques: muchos árboles mejor que uno · **Entrega E2** | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S06/S06_estudiante.ipynb) |
-| 7 | M3 · No supervisado | K-means y DBSCAN | próximamente |
+| 7 | M3 · No supervisado | K-means y DBSCAN: encontrar grupos sin respuesta | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S07/S07_estudiante.ipynb) |
 | 8 | M3 · No supervisado | PCA y t-SNE | próximamente |
 | 9 | M3 · No supervisado | Segmentación y perfilado · **Entrega E3** | próximamente |
 | 10 | M4 · Evaluación y optimización | Validación cruzada | próximamente |
@@ -64,9 +64,9 @@ df = pd.read_csv('/content/drive/MyDrive/mi_proyecto/datos.csv')   # o pd.read_e
 | Módulo | Dataset | Fuente |
 |---|---|---|
 | M1 | Incidentes viales de Medellín 2019–2025 | Secretaría de Movilidad de Medellín; Sánchez Corredor, Arango Uribe y Correa Álvarez, *Data* (MDPI, 2026). [Mendeley Data, DOI 10.17632/r6g5dfnpgh.1](https://data.mendeley.com/datasets/r6g5dfnpgh/1), licencia CC BY 4.0 |
-
 | M2 (regresión) | Insurance (cargos médicos, EE. UU.) | Lantz, *Machine Learning with R*; PyCaret datasets |
 | M2 (regresión) | Saber 11, Valle del Cauca, 2022 | ICFES — [datos.gov.co, Resultados únicos Saber 11](https://www.datos.gov.co/d/kgxf-xxbe) |
 | M2 (clasificación) | Bank Marketing (telemercadeo bancario) | Moro, Cortez y Rita (2014), [UCI ML Repository](https://archive.ics.uci.edu/dataset/222/bank+marketing) |
+| M3 | Palmer Penguins (pingüinos de la Antártida) | Gorman, Williams y Fraser (2014); Horst, Hill y Gorman (2020), [palmerpenguins](https://allisonhorst.github.io/palmerpenguins/), CC0 |
 
 Los datos de los demás módulos se agregan aquí cuando se publique cada sesión.
