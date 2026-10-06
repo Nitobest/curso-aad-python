@@ -22,6 +22,12 @@ Aquí está el material del curso. No hay que instalar nada: cada notebook se ab
 
 ---
 
+## 🧪 Laboratorio de algoritmos
+
+Cada algoritmo, para tocarlo: **[nitobest.github.io/curso-aad-python/laboratorio](https://nitobest.github.io/curso-aad-python/laboratorio/)**. Mírelo paso a paso, juegue con sus perillas y supere el reto. Funciona también en el celular.
+
+---
+
 ## Sesiones
 
 | Sesión | Módulo | Tema | Notebook |

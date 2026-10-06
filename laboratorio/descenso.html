@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Descenso de gradiente · Laboratorio</title>
+<link rel="stylesheet" href="lab.css">
+<style>:root { --acento: var(--m2); } .vista.activa { grid-template-columns: minmax(0, 1fr) 300px; }
+@media (max-width: 860px) { .vista.activa { grid-template-columns: 1fr; } }</style>
+</head>
+<body>
+<div class="envoltura">
+  <header class="lab">
+    <div>
+      <div class="chip">Sesión 4 · Módulo 2 · Regresión</div>
+      <h1>Descenso de gradiente: rodar cuesta abajo</h1>
+      <p class="sub">Para ajustar la recta, el modelo busca los coeficientes que hacen más pequeño el error. Lo hace como una bolita en un tazón: mira hacia dónde baja y da un paso de tamaño <b>η</b> (la tasa de aprendizaje).</p>
+    </div>
+    <a class="volver" href="index.html">← Todos los laboratorios</a>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-v="mira"><span class="n">1</span>Mira</button>
+    <button data-v="juega"><span class="n">2</span>Juega</button>
+    <button data-v="reto"><span class="n">3</span>Reto 💥</button>
+  </nav>
+
+  <!-- ===================== MIRA ===================== -->
+  <section class="vista" id="mira">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">Los datos y la recta actual (líneas = residuales)</div><canvas id="c-m-datos"></canvas></div>
+      <div><div class="etiqueta-lienzo">El tazón: error (MSE) para cada pareja β₀, β₁</div><canvas id="c-m-tazon"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Paso a paso</h3>
+      <p id="m-texto">La recta empieza mal puesta (punto blanco en el tazón). Cada paso la corrige un poco en la dirección en que el error baja más rápido.</p>
+      <div class="botones">
+        <button class="b primario" id="m-paso">Siguiente paso</button>
+        <button class="b" id="m-play">▶ Reproducir</button>
+        <button class="b" id="m-reset">↺ Reiniciar</button>
+      </div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="m-n">0</div><div class="e">paso</div></div>
+        <div class="cifra"><div class="v" id="m-mse">—</div><div class="e">error (MSE)</div></div>
+      </div>
+      <p class="mirar"><b>Qué mirar:</b> al principio los pasos son largos (la pendiente del tazón es fuerte) y se van acortando al llegar al fondo. La ★ es la respuesta exacta de la fórmula cerrada: el descenso llega al mismo lugar.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== JUEGA ===================== -->
+  <section class="vista" id="juega">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">Los datos y la recta actual</div><canvas id="c-j-datos"></canvas></div>
+      <div><div class="etiqueta-lienzo">Toque el tazón para elegir dónde empieza la bolita</div><canvas id="c-j-tazon"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Tasa de aprendizaje</h3>
+      <div class="control"><label><span>η</span> <output id="j-eta-o"></output></label>
+        <input type="range" id="j-eta" min="0" max="100" value="55"></div>
+      <div class="opciones" id="j-presets">
+        <button data-v="0.01">0,01</button><button data-v="0.1">0,10</button>
+        <button data-v="0.24">0,24</button><button data-v="0.28">0,28</button>
+      </div>
+      <div class="botones">
+        <button class="b primario" id="j-play">▶ Rodar</button>
+        <button class="b" id="j-paso">Un paso</button>
+        <button class="b" id="j-reset">↺</button>
+      </div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="j-n">0</div><div class="e">pasos</div></div>
+        <div class="cifra"><div class="v" id="j-mse">—</div><div class="e">error (MSE)</div></div>
+      </div>
+      <p class="mirar" id="j-mirar"></p>
+    </aside>
+  </section>
+
+  <!-- ===================== RETO ===================== -->
+  <section class="vista" id="reto">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">Error en cada paso (escala logarítmica)</div><canvas id="c-r-curva"></canvas></div>
+      <div><div class="etiqueta-lienzo">El camino en el tazón</div><canvas id="c-r-tazon"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Predice antes de correr</h3>
+      <div class="reto">
+        <p class="pregunta">Con η = 0,24 la bolita llega al fondo en zigzag. Si subimos un poquito, a <b>η = 0,28</b>, ¿qué pasa?</p>
+        <div class="opciones" id="r-ops">
+          <button data-v="rapido">Llega más rápido</button>
+          <button data-v="zigzag">Zigzaguea más, pero llega</button>
+          <button data-v="explota">Se va del tazón</button>
+        </div>
+        <div class="botones" style="margin-top:10px"><button class="b primario" id="r-correr" disabled>Correr η = 0,28</button></div>
+        <div class="respuesta" id="r-resp"></div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="lab">Introducción al Análisis Avanzado de Datos con Python · Univalle · Datos simulados: y = 1 + 1,5·x + ruido.</footer>
+</div>
+
+<script src="lab.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------ datos y error
+const rnd = azar(4), N = 40;
+const X = Array.from({ length: N }, () => rnd.entre(0, 3)), Y = X.map((x) => 1 + 1.5 * x + 0.6 * rnd.normal());
+const mse = (b0, b1) => X.reduce((s, x, i) => s + (Y[i] - b0 - b1 * x) ** 2, 0) / N;
+function grad(b0, b1) { let g0 = 0, g1 = 0; X.forEach((x, i) => { const r = Y[i] - b0 - b1 * x; g0 += -2 * r; g1 += -2 * r * x; }); return [g0 / N, g1 / N]; }
+// fórmula cerrada (mínimos cuadrados)
+const mx = X.reduce((a, b) => a + b, 0) / N, my = Y.reduce((a, b) => a + b, 0) / N;
+const B1 = X.reduce((s, x, i) => s + (x - mx) * (Y[i] - my), 0) / X.reduce((s, x) => s + (x - mx) ** 2, 0), B0 = my - B1 * mx;
+// η crítico = 2 / mayor autovalor del hessiano 2·[[1, mx],[mx, mx2]]
+const mx2 = X.reduce((s, x) => s + x * x, 0) / N, tr = 1 + mx2, det = mx2 - mx * mx;
+const LMAX = 2 * (tr + Math.sqrt(tr * tr - 4 * det)) / 2, ETA_CRIT = 2 / LMAX;
+const INICIO = [4.2, -0.6], DOM = { b0: [-3, 5.5], b1: [-1.2, 3.6] };
+
+function camino(eta, ini, pasos) { const P = [ini.slice()]; let [b0, b1] = ini;
+  for (let t = 0; t < pasos; t++) { const [g0, g1] = grad(b0, b1); b0 -= eta * g0; b1 -= eta * g1; P.push([b0, b1]);
+    if (!isFinite(b0) || Math.abs(b0) > 1e6) break; } return P; }
+
+// ------------------------------------------------------------ dibujo
+function dibujarDatos(L, b0, b1) {
+  if (!L.w) return;
+  const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); L.margen = { l: 36, r: 10, t: 10, b: 32 }; const m = L.margen;
+  const sx = escala(0, 3, m.l, L.w - m.r), sy = escala(-1, 8, L.h - m.b, m.t);
+  ejes(L, sx, sy, { xt: [0, 1, 2, 3], yt: [0, 2, 4, 6, 8], xl: "x" });
+  ctx.lineWidth = 1; X.forEach((x, i) => { const yh = b0 + b1 * x; ctx.strokeStyle = "rgba(224,100,90,.55)";
+    ctx.beginPath(); ctx.moveTo(sx(x), sy(Y[i])); ctx.lineTo(sx(x), sy(Math.max(-1, Math.min(8, yh)))); ctx.stroke(); });
+  X.forEach((x, i) => punto(ctx, sx(x), sy(Y[i]), 3.6, COL.m1));
+  ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, L.w - m.l - m.r, L.h - m.t - m.b); ctx.clip();
+  ctx.strokeStyle = COL.m2; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(sx(0), sy(b0)); ctx.lineTo(sx(3), sy(b0 + 3 * b1)); ctx.stroke(); ctx.restore();
+  ctx.fillStyle = COL.suave; ctx.font = "12px Inter, system-ui"; ctx.textAlign = "left";
+  if (isFinite(b0)) ctx.fillText(`ŷ = ${fmt(b0)} ${b1 < 0 ? "−" : "+"} ${fmt(Math.abs(b1))}·x`, m.l + 8, m.t + 14);
+}
+const fondoTazon = new Map();
+function dibujarTazon(L, P, opc = {}) {
+  if (!L.w) return;
+  const { ctx } = L; L.margen = { l: 36, r: 10, t: 10, b: 32 }; const m = L.margen;
+  const sx = escala(DOM.b0[0], DOM.b0[1], m.l, L.w - m.r), sy = escala(DOM.b1[0], DOM.b1[1], L.h - m.b, m.t); L.sx = sx; L.sy = sy;
+  const clave = L.w + "x" + L.h;
+  if (!fondoTazon.has(L) || fondoTazon.get(L).clave !== clave) {   // mapa del error (se calcula una vez por tamaño)
+    const img = ctx.createImageData(Math.ceil(L.w), Math.ceil(L.h)), dpr = 1, emin = mse(B0, B1);
+    for (let py = 0; py < img.height; py += 1) for (let px = 0; px < img.width; px += 1) {
+      const e = Math.log(mse(sx.inv(px), sy.inv(py)) / emin), banda = (e * 2.2) % 1 < 0.06, t = Math.min(1, e / 4.2);
+      const r = 13 + t * 30, g = 20 + (1 - t) * 120 + t * 20, b = 36 + (1 - t) * 60 + t * 40, k = (py * img.width + px) * 4;
+      img.data[k] = banda ? r + 40 : r; img.data[k + 1] = banda ? g + 40 : g; img.data[k + 2] = banda ? b + 40 : b; img.data[k + 3] = 255;
+    }
+    const off = document.createElement("canvas"); off.width = img.width; off.height = img.height; off.getContext("2d").putImageData(img, 0, 0);
+    fondoTazon.set(L, { clave, off });
+  }
+  ctx.clearRect(0, 0, L.w, L.h); ctx.drawImage(fondoTazon.get(L).off, 0, 0, L.w, L.h);
+  ctx.fillStyle = "#0D1424"; ctx.fillRect(0, L.h - m.b, L.w, m.b); ctx.fillRect(0, 0, m.l, L.h);
+  ejes(L, sx, sy, { xt: [-2, 0, 2, 4], yt: [-1, 0, 1, 2, 3], xl: "β₀ (intercepto)", yl: "β₁ (pendiente)" });
+  // estrella: solución exacta
+  ctx.fillStyle = "#E8C547"; ctx.font = "18px system-ui"; ctx.textAlign = "center"; ctx.fillText("★", sx(B0), sy(B1) + 6);
+  if (P && P.length) {
+    ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, L.w - m.l - m.r, L.h - m.t - m.b); ctx.clip();
+    ctx.strokeStyle = opc.color || "#FFFFFF"; ctx.lineWidth = 1.6; ctx.beginPath();
+    P.forEach(([a, b], i) => (i ? ctx.lineTo(sx(a), sy(b)) : ctx.moveTo(sx(a), sy(b)))); ctx.stroke();
+    P.forEach(([a, b], i) => punto(ctx, sx(a), sy(b), i === P.length - 1 ? 6 : 2.6, i === P.length - 1 ? "#FFFFFF" : (opc.color || "#FFFFFF"), i === P.length - 1 ? COL.m2 : null));
+    ctx.restore();
+  }
+}
+
+// ------------------------------------------------------------ MIRA
+const MD = lienzo("c-m-datos", 0.85), MT = lienzo("c-m-tazon", 0.85), ETA_M = 0.1;
+const SM = { P: [INICIO.slice()], play: null };
+function mDibujar() { const [b0, b1] = SM.P[SM.P.length - 1]; dibujarDatos(MD, b0, b1); dibujarTazon(MT, SM.P);
+  document.getElementById("m-n").textContent = SM.P.length - 1; document.getElementById("m-mse").textContent = fmt(mse(b0, b1), 3); }
+MD.alDibujar = MT.alDibujar = mDibujar;
+function mPaso() { const [b0, b1] = SM.P[SM.P.length - 1], [g0, g1] = grad(b0, b1); SM.P.push([b0 - ETA_M * g0, b1 - ETA_M * g1]);
+  const n = SM.P.length - 1, t = document.getElementById("m-texto");
+  t.innerHTML = n === 1 ? `<b>Paso 1:</b> el gradiente dice hacia dónde sube el error; damos un paso al lado contrario: β ← β − η·∇. Con η = ${fmt(ETA_M)}.`
+    : n < 12 ? `<b>Paso ${n}:</b> la recta gira y sube hacia los puntos; los residuales (rojo) se acortan.`
+    : mse(...SM.P[n]) - mse(B0, B1) > 0.01 ? `<b>Paso ${n}:</b> ya está en el fondo del valle, que es largo y casi plano: los pasos se acortan y avanza despacio hacia la ★.`
+    : `<b>Paso ${n}:</b> llegó. La recta ya es la de mínimos cuadrados: el mismo resultado que la fórmula cerrada.`;
+  mDibujar(); if (n >= 120) mParar(); }
+function mParar() { if (SM.play) { clearInterval(SM.play); SM.play = null; } document.getElementById("m-play").textContent = "▶ Reproducir"; }
+document.getElementById("m-paso").onclick = () => { mParar(); mPaso(); };
+document.getElementById("m-play").onclick = () => { if (SM.play) return mParar(); document.getElementById("m-play").textContent = "⏸ Pausa"; SM.play = setInterval(mPaso, 140); };
+document.getElementById("m-reset").onclick = () => { mParar(); SM.P = [INICIO.slice()];
+  document.getElementById("m-texto").innerHTML = "La recta empieza mal puesta (punto blanco en el tazón). Cada paso la corrige un poco en la dirección en que el error baja más rápido."; mDibujar(); };
+
+// ------------------------------------------------------------ JUEGA
+const JD = lienzo("c-j-datos", 0.85), JT = lienzo("c-j-tazon", 0.85);
+const SJ = { ini: INICIO.slice(), P: [INICIO.slice()], anim: null };
+const etaDeSlider = (v) => 0.005 * Math.pow(0.30 / 0.005, v / 100), sliderDeEta = (e) => Math.round(100 * Math.log(e / 0.005) / Math.log(0.30 / 0.005));
+const eta = () => etaDeSlider(+document.getElementById("j-eta").value);
+function jDibujar() { const [b0, b1] = SJ.P[SJ.P.length - 1]; dibujarDatos(JD, b0, b1); dibujarTazon(JT, SJ.P);
+  const e = mse(b0, b1); document.getElementById("j-n").textContent = SJ.P.length - 1;
+  document.getElementById("j-mse").textContent = isFinite(e) && e < 1e6 ? fmt(e, 3) : "∞";
+  document.getElementById("j-eta-o").textContent = fmt(eta(), 3);
+  const h = eta(), m = document.getElementById("j-mirar");
+  m.innerHTML = "<b>Qué mirar:</b> " + (h < 0.03 ? "con η muy pequeña los pasos son tímidos: llega, pero tarda cientos de pasos."
+    : h < 0.18 ? "un η razonable: baja directo y sin rebotar."
+    : h < ETA_CRIT ? "el paso es tan largo que la bolita cruza el valle y rebota de lado a lado (zigzag). Todavía llega."
+    : `por encima de η ≈ ${fmt(ETA_CRIT, 3)} cada rebote es más alto que el anterior: <b>diverge</b>. El error crece sin límite.`); }
+JD.alDibujar = JT.alDibujar = jDibujar;
+function jReset() { if (SJ.anim) clearInterval(SJ.anim); SJ.anim = null; SJ.P = [SJ.ini.slice()]; document.getElementById("j-play").textContent = "▶ Rodar"; jDibujar(); }
+function jPaso() { const [b0, b1] = SJ.P[SJ.P.length - 1]; if (!isFinite(b0) || Math.abs(b0) > 1e4) { jStop(); return; }
+  const [g0, g1] = grad(b0, b1), h = eta(); SJ.P.push([b0 - h * g0, b1 - h * g1]); jDibujar(); if (SJ.P.length > 400) jStop(); }
+function jStop() { if (SJ.anim) clearInterval(SJ.anim); SJ.anim = null; document.getElementById("j-play").textContent = "▶ Rodar"; }
+document.getElementById("j-play").onclick = () => { if (SJ.anim) return jStop(); if (SJ.P.length > 1) SJ.P = [SJ.ini.slice()];
+  document.getElementById("j-play").textContent = "⏸ Pausa"; SJ.anim = setInterval(jPaso, 60); };
+document.getElementById("j-paso").onclick = () => { jStop(); jPaso(); };
+document.getElementById("j-reset").onclick = jReset;
+document.getElementById("j-eta").oninput = () => { [...document.querySelectorAll("#j-presets button")].forEach((b) => b.setAttribute("aria-pressed", false)); jReset(); };
+opciones("j-presets", (v) => { document.getElementById("j-eta").value = sliderDeEta(+v); jReset(); });
+JT.c.addEventListener("pointerdown", (e) => { const p = puntero(JT, e); if (!JT.sx) return;
+  SJ.ini = [JT.sx.inv(p.x), JT.sy.inv(p.y)]; jReset(); });
+
+// ------------------------------------------------------------ RETO
+const RC = lienzo("c-r-curva", 0.85), RT = lienzo("c-r-tazon", 0.85);
+const SR = { eleccion: null, corrido: false };
+const P24 = camino(0.24, INICIO, 60), P28 = camino(0.28, INICIO, 60);
+function dibujarCurva(L, series) {
+  if (!L.w) return;
+  const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); L.margen = { l: 44, r: 10, t: 10, b: 32 }; const m = L.margen;
+  const sx = escala(0, 60, m.l, L.w - m.r), sy = escala(-1.0, 3, L.h - m.b, m.t);
+  ejes(L, sx, sy, { xt: [0, 20, 40, 60], yt: [-1, 0, 1, 2, 3], fy: (v) => "10" + ["⁻¹", "⁰", "¹", "²", "³"][v + 1], xl: "paso" });
+  series.forEach(({ P, color, nombre }, k) => { ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); let fuera = false;
+    P.forEach(([a, b], i) => { const e = Math.log10(mse(a, b)); const y = sy(Math.min(3.2, e)); if (e > 3.2) fuera = true; i ? ctx.lineTo(sx(i), y) : ctx.moveTo(sx(i), y); }); ctx.stroke();
+    ctx.fillStyle = color; ctx.font = "12px Inter, system-ui"; ctx.textAlign = "left"; ctx.fillText(nombre, m.l + 10, m.t + 14 + 16 * k); });
+}
+function rDibujar() { const s = [{ P: P24, color: COL.m2, nombre: "η = 0,24" }]; if (SR.corrido) s.push({ P: P28, color: COL.rojo, nombre: "η = 0,28" });
+  dibujarCurva(RC, s); dibujarTazon(RT, SR.corrido ? P28.slice(0, 14) : P24, { color: SR.corrido ? COL.rojo : COL.m2 }); }
+RC.alDibujar = RT.alDibujar = rDibujar;
+opciones("r-ops", (v) => { SR.eleccion = v; document.getElementById("r-correr").disabled = false; });
+document.getElementById("r-correr").onclick = () => { SR.corrido = true; rDibujar();
+  const ok = SR.eleccion === "explota", r = document.getElementById("r-resp");
+  r.innerHTML = (ok ? '<span class="ok">¡Exacto!</span> ' : '<span class="no">No: se va del tazón.</span> ') +
+    `Con estos datos, cualquier η por encima de <b>${fmt(ETA_CRIT, 3)}</b> diverge: el paso es tan largo que cada rebote cae más arriba que el anterior y el error crece sin límite (curva roja). ` +
+    "Entre 0,24 y 0,28 no hay un cambio gradual, hay un <b>precipicio</b>. Por eso en la práctica se prueba η en escala logarítmica (0,001 · 0,01 · 0,1) y se vigila que el error baje.";
+  r.classList.add("visible"); };
+
+pestanas(() => [MD, MT, JD, JT, RC, RT].forEach((L) => L.ajustar()));
+mDibujar(); document.getElementById("j-eta").value = sliderDeEta(0.1); jReset(); rDibujar();
+</script>
+</body>
+</html>

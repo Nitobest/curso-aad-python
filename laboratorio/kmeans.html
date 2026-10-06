@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K-means · Laboratorio</title>
+<link rel="stylesheet" href="lab.css">
+<style>:root { --acento: var(--m3); }</style>
+</head>
+<body>
+<div class="envoltura">
+  <header class="lab">
+    <div>
+      <div class="chip">Sesión 7 · Módulo 3 · No supervisado</div>
+      <h1>K-means: encontrar grupos sin respuesta</h1>
+      <p class="sub">El algoritmo repite dos pasos: <b>asignar</b> cada punto al centroide más cercano y <b>mover</b> cada centroide al promedio de sus puntos. Hasta que nada cambia.</p>
+    </div>
+    <a class="volver" href="index.html">← Todos los laboratorios</a>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-v="mira"><span class="n">1</span>Mira</button>
+    <button data-v="juega"><span class="n">2</span>Juega</button>
+    <button data-v="reto"><span class="n">3</span>Reto 💥</button>
+  </nav>
+
+  <!-- ===================== MIRA ===================== -->
+  <section class="vista" id="mira">
+    <div class="lienzo"><canvas id="c-mira"></canvas></div>
+    <aside class="panel">
+      <h3>Paso a paso</h3>
+      <p id="mira-fase">Los centroides (✕) empiezan en lugares al azar. Presione <b>Siguiente paso</b>.</p>
+      <div class="botones">
+        <button class="b primario" id="mira-paso">Siguiente paso</button>
+        <button class="b" id="mira-play">▶ Reproducir</button>
+        <button class="b" id="mira-reset">↺ Otra semilla</button>
+      </div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="mira-it">0</div><div class="e">iteración</div></div>
+        <div class="cifra"><div class="v" id="mira-in">—</div><div class="e">inercia</div></div>
+      </div>
+      <p class="mirar"><b>Qué mirar:</b> la inercia (suma de distancias² de cada punto a su centroide) solo puede bajar o quedarse igual. Cuando deja de bajar, el algoritmo terminó.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== JUEGA ===================== -->
+  <section class="vista" id="juega">
+    <div class="lienzo"><canvas id="c-juega"></canvas>
+      <div class="etiqueta-lienzo">Toque o haga clic en el lienzo para agregar puntos.</div></div>
+    <aside class="panel">
+      <h3>Datos</h3>
+      <div class="opciones" id="juega-datos">
+        <button data-v="nubes" aria-pressed="true">4 nubes</button>
+        <button data-v="lunas">Lunas</button>
+        <button data-v="anillo">Anillo</button>
+        <button data-v="vacio">Vacío</button>
+      </div>
+      <div class="control"><label><span>Número de grupos <i>k</i></span> <output id="juega-k-o">4</output></label>
+        <input type="range" id="juega-k" min="1" max="8" value="4"></div>
+      <label class="check"><input type="checkbox" id="juega-reg" checked> Mostrar regiones</label>
+      <div class="botones"><button class="b" id="juega-sem">↺ Otra semilla</button></div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="juega-in">—</div><div class="e">inercia</div></div>
+        <div class="cifra"><div class="v" id="juega-it">—</div><div class="e">iteraciones</div></div>
+      </div>
+      <p class="mirar" id="juega-mirar"></p>
+    </aside>
+  </section>
+
+  <!-- ===================== RETO ===================== -->
+  <section class="vista" id="reto">
+    <div class="lienzo"><canvas id="c-reto"></canvas>
+      <div class="etiqueta-lienzo" id="reto-leyenda">342 pingüinos de 3 especies. K-means no ve la especie: solo las 4 medidas (pico largo, pico alto, aleta, masa).</div></div>
+    <aside class="panel">
+      <h3>Predice antes de correr</h3>
+      <div class="reto">
+        <p class="pregunta">K-means con k = 3 sobre las medidas <b>tal como vienen</b> (milímetros y gramos). ¿Qué porcentaje de pingüinos queda en el grupo de su propia especie?</p>
+        <div class="control"><label>Mi predicción <output id="reto-p-o">80 %</output></label>
+          <input type="range" id="reto-p" min="33" max="100" value="80"></div>
+        <div class="botones" style="margin-top:10px"><button class="b primario" id="reto-crudo">Agrupar sin escalar</button></div>
+        <div class="respuesta" id="reto-r1"></div>
+      </div>
+      <div class="reto" id="reto-paso2" style="display:none">
+        <p class="pregunta">¿Por qué los grupos son franjas verticales? Mire el eje horizontal.</p>
+        <div class="botones"><button class="b primario" id="reto-z">Escalar (z) y volver a agrupar</button></div>
+        <div class="respuesta" id="reto-r2"></div>
+      </div>
+      <div class="opciones" id="reto-ver" style="display:none">
+        <button data-v="grupo" aria-pressed="true">Color = grupo</button>
+        <button data-v="especie">Color = especie real</button>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="lab">Introducción al Análisis Avanzado de Datos con Python · Univalle · Datos: Palmer Penguins (Gorman, Williams y Fraser, 2014; CC0).</footer>
+</div>
+
+<script src="lab.js"></script>
+<script src="pinguinos.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------ K-means
+const d2 = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return s; };
+function kpp(X, k, r) {                       // k-means++: centroides iniciales separados
+  const C = [X[Math.floor(r() * X.length)].slice()];
+  while (C.length < k) {
+    const D = X.map((x) => Math.min(...C.map((c) => d2(x, c)))), s = D.reduce((a, b) => a + b, 0);
+    let u = r() * s, i = 0; while (i < D.length - 1 && u > D[i]) { u -= D[i]; i++; }
+    C.push(X[i].slice());
+  }
+  return C;
+}
+function alAzar(X, k, r) { return Array.from({ length: k }, () => X[Math.floor(r() * X.length)].slice()); }
+const asignar = (X, C) => X.map((x) => { let b = 0, bd = Infinity; C.forEach((c, j) => { const d = d2(x, c); if (d < bd) { bd = d; b = j; } }); return b; });
+const promediar = (X, L, C) => C.map((c, j) => { let n = 0; const s = c.map(() => 0);
+  X.forEach((x, i) => { if (L[i] === j) { n++; x.forEach((v, d) => (s[d] += v)); } }); return n ? s.map((v) => v / n) : c.slice(); });
+const inercia = (X, L, C) => X.reduce((s, x, i) => s + d2(x, C[L[i]]), 0);
+function kmeans(X, k, semilla, nInit = 10) {
+  const r = azar(semilla); let mejor = null;
+  for (let t = 0; t < nInit; t++) {
+    let C = kpp(X, k, r), L, it = 0;
+    for (; it < 300; it++) { L = asignar(X, C); const N = promediar(X, L, C); const mv = N.reduce((s, c, j) => s + d2(c, C[j]), 0); C = N; if (mv < 1e-12) break; }
+    const I = inercia(X, L, C); if (!mejor || I < mejor.I) mejor = { C, L, I, it: it + 1 };
+  }
+  return mejor;
+}
+
+// ------------------------------------------------------------ datos de laboratorio (coordenadas 0–10)
+function nubes(sem) { const r = azar(sem), P = [];
+  [[2.4, 7.3], [7.6, 7.6], [6.4, 2.6], [8.1, 3.6]].forEach(([cx, cy], g) => { const n = g < 2 ? 70 : 55, s = g < 2 ? 0.75 : 0.55;
+    for (let i = 0; i < n; i++) P.push([cx + s * r.normal(), cy + s * r.normal()]); }); return P; }
+function lunas(sem) { const r = azar(sem), P = [];
+  for (let i = 0; i < 110; i++) { const t = Math.PI * r(); P.push([3.6 + 2.6 * Math.cos(t) + .15 * r.normal(), 4.4 + 2.6 * Math.sin(t) + .15 * r.normal()]); }
+  for (let i = 0; i < 110; i++) { const t = Math.PI * r(); P.push([6.2 - 2.6 * Math.cos(t) + .15 * r.normal(), 5.6 - 2.6 * Math.sin(t) + .15 * r.normal()]); }
+  return P; }
+function anillo(sem) { const r = azar(sem), P = [];
+  for (let i = 0; i < 160; i++) { const t = 2 * Math.PI * r(); P.push([5 + 3.6 * Math.cos(t) + .25 * r.normal(), 5 + 3.6 * Math.sin(t) + .25 * r.normal()]); }
+  for (let i = 0; i < 60; i++) P.push([5 + .6 * r.normal(), 5 + .6 * r.normal()]); return P; }
+
+function marco(L) { L.margen = { l: 14, r: 14, t: 14, b: 14 }; const m = L.margen, lado = Math.min(L.w - m.l - m.r, L.h - m.t - m.b);
+  const ox = (L.w - lado) / 2, oy = (L.h - lado) / 2; return { sx: escala(0, 10, ox, ox + lado), sy: escala(0, 10, oy + lado, oy) }; }
+function dibujarCentroide(ctx, x, y, color) {
+  ctx.save(); ctx.lineWidth = 4; ctx.strokeStyle = "#0D1424";
+  ctx.beginPath(); ctx.moveTo(x - 9, y - 9); ctx.lineTo(x + 9, y + 9); ctx.moveTo(x + 9, y - 9); ctx.lineTo(x - 9, y + 9); ctx.stroke();
+  ctx.lineWidth = 2.6; ctx.strokeStyle = color; ctx.stroke(); ctx.restore();
+}
+function regiones(L, s, C, alfa = 0.13) {
+  const { ctx } = L, paso = 6;
+  for (let px = 0; px < L.w; px += paso) for (let py = 0; py < L.h; py += paso) {
+    const p = [s.sx.inv(px + paso / 2), s.sy.inv(py + paso / 2)]; let b = 0, bd = Infinity;
+    C.forEach((c, j) => { const d = d2(p, c); if (d < bd) { bd = d; b = j; } });
+    ctx.globalAlpha = alfa; ctx.fillStyle = COL.grupos[b % 8]; ctx.fillRect(px, py, paso, paso);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ------------------------------------------------------------ MIRA
+const M = { L: lienzo("c-mira", 0.72), sem: 5, X: [], C: [], L_: null, fase: 0, it: 0, rastro: [], anim: null, play: null };
+function miraIniciar() {
+  M.X = nubes(3); const r = azar(M.sem); M.C = alAzar(M.X, 4, r); M.L_ = null; M.fase = 0; M.it = 0; M.rastro = M.C.map((c) => [c.slice()]);
+  document.getElementById("mira-fase").innerHTML = "Los centroides (✕) empiezan en <b>lugares al azar</b>. Presione <b>Siguiente paso</b>.";
+  document.getElementById("mira-it").textContent = "0"; document.getElementById("mira-in").textContent = "—";
+  document.getElementById("mira-paso").disabled = false; miraDibujar();
+}
+function miraDibujar() {
+  const L = M.L, { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const s = marco(L);
+  if (M.L_ && M.fase === 1) {           // líneas punto → centroide en la fase de asignar
+    ctx.lineWidth = 0.6; M.X.forEach((x, i) => { const c = M.C[M.L_[i]]; ctx.strokeStyle = COL.grupos[M.L_[i]] + "55";
+      ctx.beginPath(); ctx.moveTo(s.sx(x[0]), s.sy(x[1])); ctx.lineTo(s.sx(c[0]), s.sy(c[1])); ctx.stroke(); });
+  }
+  M.X.forEach((x, i) => punto(ctx, s.sx(x[0]), s.sy(x[1]), 3.6, M.L_ ? COL.grupos[M.L_[i]] : "#5B6478"));
+  M.rastro.forEach((r, j) => { ctx.strokeStyle = COL.grupos[j]; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.beginPath();
+    r.forEach((c, t) => (t ? ctx.lineTo(s.sx(c[0]), s.sy(c[1])) : ctx.moveTo(s.sx(c[0]), s.sy(c[1])))); ctx.stroke(); ctx.setLineDash([]); });
+  M.C.forEach((c, j) => dibujarCentroide(ctx, s.sx(c[0]), s.sy(c[1]), COL.grupos[j]));
+}
+M.L.alDibujar = miraDibujar;
+function miraPaso() {
+  if (M.anim) return;
+  const f = document.getElementById("mira-fase");
+  if (M.fase !== 1) {                     // ASIGNAR
+    const nuevo = asignar(M.X, M.C), cambio = !M.L_ || nuevo.some((v, i) => v !== M.L_[i]);
+    M.L_ = nuevo; M.fase = 1; M.it += 1;
+    document.getElementById("mira-it").textContent = M.it;
+    document.getElementById("mira-in").textContent = fmt(inercia(M.X, M.L_, M.C), 0);
+    if (!cambio && M.it > 1) {
+      f.innerHTML = "<b>Terminó.</b> Ningún punto cambió de grupo: los centroides ya no se van a mover. Pruebe <b>Otra semilla</b>: ¿siempre llega a la misma solución?";
+      document.getElementById("mira-paso").disabled = true; detenerPlay(); miraDibujar(); return;
+    }
+    f.innerHTML = "<b>Paso 1 · Asignar:</b> cada punto se pinta del color del centroide más cercano (las líneas muestran a cuál).";
+    miraDibujar();
+  } else {                                // PROMEDIAR (animado)
+    const desde = M.C.map((c) => c.slice()), hacia = promediar(M.X, M.L_, M.C), t0 = performance.now(), dur = 650;
+    f.innerHTML = "<b>Paso 2 · Mover:</b> cada centroide viaja al promedio de los puntos de su color.";
+    const anim = (t) => { const a = Math.min(1, (t - t0) / dur), e = a < .5 ? 2 * a * a : 1 - Math.pow(-2 * a + 2, 2) / 2;
+      M.C = desde.map((c, j) => [c[0] + (hacia[j][0] - c[0]) * e, c[1] + (hacia[j][1] - c[1]) * e]); M.fase = 2; miraDibujar();
+      if (a < 1) M.anim = requestAnimationFrame(anim);
+      else { M.anim = null; M.C = hacia; M.rastro.forEach((r, j) => r.push(hacia[j].slice()));
+        document.getElementById("mira-in").textContent = fmt(inercia(M.X, M.L_, M.C), 0); miraDibujar(); } };
+    M.anim = requestAnimationFrame(anim);
+  }
+}
+function detenerPlay() { if (M.play) { clearInterval(M.play); M.play = null; document.getElementById("mira-play").textContent = "▶ Reproducir"; } }
+document.getElementById("mira-paso").onclick = () => { detenerPlay(); miraPaso(); };
+document.getElementById("mira-play").onclick = () => {
+  if (M.play) return detenerPlay();
+  document.getElementById("mira-play").textContent = "⏸ Pausa";
+  M.play = setInterval(() => { if (document.getElementById("mira-paso").disabled) return detenerPlay(); miraPaso(); }, 900);
+};
+document.getElementById("mira-reset").onclick = () => { detenerPlay(); if (M.anim) cancelAnimationFrame(M.anim); M.anim = null; M.sem += 1; miraIniciar(); };
+
+// ------------------------------------------------------------ JUEGA
+const J = { L: lienzo("c-juega", 0.72), datos: "nubes", sem: 1, X: [], res: null };
+function juegaDatos(v) { J.datos = v; J.X = v === "nubes" ? nubes(3) : v === "lunas" ? lunas(4) : v === "anillo" ? anillo(6) : []; juegaCorrer(); }
+function juegaCorrer() {
+  const k = +document.getElementById("juega-k").value;
+  document.getElementById("juega-k-o").textContent = k;
+  J.res = J.X.length >= k ? kmeans(J.X, k, J.sem, 10) : null;
+  document.getElementById("juega-in").textContent = J.res ? fmt(J.res.I, 0) : "—";
+  document.getElementById("juega-it").textContent = J.res ? J.res.it : "—";
+  const m = document.getElementById("juega-mirar");
+  const msg = {
+    nubes: k === 4 ? "Fabricamos 4 nubes y K-means las encuentra. Mueva <b>k</b>: con 3 junta las dos de la derecha; con 6 parte nubes reales en dos. K-means <b>siempre</b> entrega k grupos, existan o no."
+      : k < 4 ? "Con menos grupos que nubes, K-means junta nubes vecinas." : "Con más grupos que nubes, K-means parte nubes que en realidad son una sola. La inercia baja igual: <b>más k siempre baja la inercia</b>.",
+    lunas: "Las lunas no son redondas: K-means corta en línea recta (cada región es un polígono alrededor de su centroide). Para formas así, la Sesión 7 usa <b>DBSCAN</b>.",
+    anillo: "Un anillo y un núcleo: el grupo \"real\" no es una nube alrededor de un centro. K-means lo parte en tajadas de torta.",
+    vacio: "Toque el lienzo para dibujar sus propios puntos y vea cómo los agrupa K-means.",
+  }[J.datos];
+  m.innerHTML = "<b>Qué mirar:</b> " + msg;
+  juegaDibujar();
+}
+function juegaDibujar() {
+  const L = J.L, { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const s = marco(L);
+  if (J.res && document.getElementById("juega-reg").checked) regiones(L, s, J.res.C);
+  J.X.forEach((x, i) => punto(ctx, s.sx(x[0]), s.sy(x[1]), 3.6, J.res ? COL.grupos[J.res.L[i] % 8] : "#5B6478"));
+  if (J.res) J.res.C.forEach((c, j) => dibujarCentroide(ctx, s.sx(c[0]), s.sy(c[1]), COL.grupos[j % 8]));
+}
+J.L.alDibujar = juegaDibujar;
+opciones("juega-datos", juegaDatos);
+document.getElementById("juega-k").oninput = juegaCorrer;
+document.getElementById("juega-reg").onchange = juegaDibujar;
+document.getElementById("juega-sem").onclick = () => { J.sem += 1; juegaCorrer(); };
+J.L.c.addEventListener("pointerdown", (e) => { const p = puntero(J.L, e), s = marco(J.L), r = azar(J.X.length + 11);
+  for (let i = 0; i < 6; i++) J.X.push([s.sx.inv(p.x) + .3 * r.normal(), s.sy.inv(p.y) + .3 * r.normal()]); juegaCorrer(); });
+
+// ------------------------------------------------------------ RETO (pingüinos)
+const R = { L: lienzo("c-reto", 0.72), estado: 0, Lc: null, Lz: null, ver: "grupo" };
+const PX = PINGUINOS.map((p) => p.slice(0, 4)), PY = PINGUINOS.map((p) => p[4]);
+const mu = [0, 1, 2, 3].map((d) => PX.reduce((s, x) => s + x[d], 0) / PX.length);
+const sd = [0, 1, 2, 3].map((d) => Math.sqrt(PX.reduce((s, x) => s + (x[d] - mu[d]) ** 2, 0) / PX.length));
+const PZ = PX.map((x) => x.map((v, d) => (v - mu[d]) / sd[d]));
+function pureza(L) { let s = 0; for (let j = 0; j < 3; j++) { const c = [0, 0, 0]; L.forEach((l, i) => { if (l === j) c[PY[i]]++; }); s += Math.max(...c); } return s / L.length; }
+const ESPECIES = ["Adelie", "Chinstrap", "Gentoo"], COL_ESP = ["#E8C547", "#D96FB0", "#4FC3C9"];
+function retoDibujar() {
+  const L = R.L, { ctx } = L; ctx.clearRect(0, 0, L.w, L.h);
+  L.margen = { l: 54, r: 14, t: 14, b: 40 }; const m = L.margen;
+  const sx = escala(2600, 6400, m.l, L.w - m.r), sy = escala(31, 61, L.h - m.b, m.t);
+  ejes(L, sx, sy, { xt: [3000, 4000, 5000, 6000], yt: [35, 40, 45, 50, 55, 60], fx: (v) => fmt(v, 0), xl: "masa corporal (g)", yl: "largo del pico (mm)" });
+  const lab = R.estado === 2 ? R.Lz : R.estado === 1 ? R.Lc : null, esp = lab && R.ver === "especie";
+  PX.forEach((x, i) => punto(ctx, sx(x[3]), sy(x[0]), 3.4, !lab ? "#5B6478" : esp ? COL_ESP[PY[i]] : COL.grupos[lab[i]]));
+  if (esp) { ctx.font = "12px Inter, system-ui"; ctx.textAlign = "left";
+    ESPECIES.forEach((e, j) => { punto(ctx, m.l + 14, m.t + 10 + 18 * j, 5, COL_ESP[j]); ctx.fillStyle = COL.suave; ctx.fillText(e, m.l + 24, m.t + 14 + 18 * j); }); }
+}
+R.L.alDibujar = retoDibujar;
+document.getElementById("reto-p").oninput = (e) => (document.getElementById("reto-p-o").textContent = e.target.value + " %");
+document.getElementById("reto-crudo").onclick = () => {
+  R.Lc = kmeans(PX, 3, 7).L; R.estado = 1; R.ver = "grupo";
+  const p = pureza(R.Lc), g = +document.getElementById("reto-p").value, r = document.getElementById("reto-r1");
+  r.innerHTML = `Resultado: <b>${pct(p)}</b> de los pingüinos quedó con su especie. Usted dijo ${g} %. ` +
+    (Math.abs(g - 100 * p) <= 8 ? '<span class="ok">¡Muy cerca!</span>' : '<span class="no">La mayoría apuesta más alto.</span>') +
+    " Mire el dibujo: los grupos son <b>franjas</b> de masa corporal.";
+  r.classList.add("visible"); document.getElementById("reto-paso2").style.display = "block";
+  document.getElementById("reto-ver").style.display = "flex"; verOpc.elegir("grupo");
+};
+document.getElementById("reto-z").onclick = () => {
+  R.Lz = kmeans(PZ, 3, 7).L; R.estado = 2; verOpc.elegir("grupo");
+  const r = document.getElementById("reto-r2");
+  r.innerHTML = `Escalado: <b>${pct(pureza(R.Lz))}</b>. La masa se mide en gramos (desviación ≈ ${fmt(sd[3], 0)} g) y el alto del pico en milímetros (≈ ${fmt(sd[1], 1)} mm): ` +
+    `en la distancia, 500 g pesan lo mismo que 500 mm. Sin escalar, K-means agrupó <b>por gramos</b>. Con <i>z</i> = (x − media) / desviación, las 4 medidas votan parejo.` +
+    ` Compare los colores con <b>Color = especie real</b>.`;
+  r.classList.add("visible");
+};
+const verOpc = opciones("reto-ver", (v) => { R.ver = v; retoDibujar(); });
+
+pestanas(() => { M.L.ajustar(); J.L.ajustar(); R.L.ajustar(); });
+miraIniciar(); juegaDatos("nubes");
+</script>
+</body>
+</html>
