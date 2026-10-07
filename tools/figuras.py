@@ -15,7 +15,8 @@ Uso en Colab (el notebook baja este archivo del repo junto a los datos):
     fg.arbol_paso_a_paso()
 
 Módulo 1 (árbol de decisión): pipeline, arbol_paso_a_paso, arbol_como_elige_el_corte,
-arbol_reglas, mapa_hora_dia, arbol_profundidades.
+arbol_reglas, mapa_hora_dia, arbol_profundidades. `cajas_hojas(ax, modelo, xlim, ylim)` dibuja el borde de
+cada hoja sobre cualquier mapa de 2 variables (hojas vecinas con la misma clase no se pierden).
 Los helpers de M2–M4 se agregan en su momento, con la misma firma (datos → fig).
 """
 from __future__ import annotations
@@ -100,8 +101,49 @@ def _regiones(ax, modelo, X, y, xcol="hora", ycol="velocidad", titulo=""):
     malla = pd.DataFrame({xcol: xx.ravel(), ycol: yy.ravel()})
     z = modelo.predict_proba(malla)[:, 1].reshape(xx.shape)
     ax.contourf(xx, yy, z, levels=np.linspace(0, 1, 11), cmap=CMAP_PROB, alpha=0.55)
+    cajas_hojas(ax, modelo, (xx.min(), xx.max()), (yy.min(), yy.max()), columnas=(xcol, ycol))
     ax.scatter(X[xcol], X[ycol], c=y, cmap=CMAP_CLASES, s=14, edgecolor="white", linewidth=0.3)
     ax.set_xlabel(xcol); ax.set_ylabel(ycol); ax.set_title(titulo)
+
+
+def cajas_hojas(ax, modelo, xlim, ylim, columnas=None, color=NEGRO, lw=0.7, alpha=0.55):
+    """Dibuja el borde de CADA hoja de un árbol de 2 variables (un rectángulo por hoja).
+
+    El fondo pintado por clase o por probabilidad no basta: dos hojas vecinas que predicen la misma clase
+    quedan del mismo color y la línea que las separa desaparece ("dice 4 hojas pero veo 3 zonas").
+    Los rectángulos se leen directamente de la estructura del árbol (`modelo.tree_`), así que son exactos.
+    `columnas` = nombres (x, y) del gráfico; si el modelo se entrenó con las columnas en otro orden, se
+    usan sus `feature_names_in_` para saber cuál es cuál. Si el modelo no es un árbol, no hace nada.
+    Devuelve el número de hojas dibujadas."""
+    t = getattr(modelo, "tree_", None)
+    if t is None:
+        return 0
+    ix, iy = 0, 1
+    nombres = getattr(modelo, "feature_names_in_", None)
+    if columnas is not None and nombres is not None:
+        nombres = list(nombres)
+        ix, iy = nombres.index(columnas[0]), nombres.index(columnas[1])
+    n_dibujadas = [0]
+
+    def _recorrer(n, x0, x1, y0, y1):
+        if x1 <= x0 or y1 <= y0:
+            return
+        izq, der = t.children_left[n], t.children_right[n]
+        if izq == -1:
+            ax.add_patch(plt.Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec=color, lw=lw,
+                                       alpha=alpha, zorder=2))
+            n_dibujadas[0] += 1
+            return
+        f, u = t.feature[n], t.threshold[n]
+        if f == ix:
+            _recorrer(izq, x0, min(x1, u), y0, y1); _recorrer(der, max(x0, u), x1, y0, y1)
+        elif f == iy:
+            _recorrer(izq, x0, x1, y0, min(y1, u)); _recorrer(der, x0, x1, max(y0, u), y1)
+        else:  # una variable que no está en el gráfico: ambas ramas ocupan la misma caja
+            _recorrer(izq, x0, x1, y0, y1); _recorrer(der, x0, x1, y0, y1)
+
+    _recorrer(0, xlim[0], xlim[1], ylim[0], ylim[1])
+    return n_dibujadas[0]
 
 
 def arbol_paso_a_paso(profundidades=(1, 2, 3, 4), n=300):
@@ -2429,7 +2471,8 @@ def memorizar_vs_aprender(n=260, semilla=11):
     for ax, (d, nombre) in zip(axes, configs):
         m = DecisionTreeClassifier(max_depth=d, random_state=0).fit(X_tr, y_tr)
         z = m.predict_proba(malla)[:, 1].reshape(xx.shape)
-        ax.contourf(xx, yy, z, levels=[0, 0.5, 1], colors=["#DCE8F6", "#F6DCD9"])
+        ax.contourf(xx, yy, z, levels=np.linspace(0, 1, 11), cmap=CMAP_PROB, alpha=0.5)
+        cajas_hojas(ax, m, (0, 24), (20, 100), lw=0.5, alpha=0.4)
         ax.scatter(X_tr["hora"], X_tr["velocidad"], c=y_tr, cmap=CMAP_CLASES, s=18, edgecolor="white", lw=0.4)
         for c, col in ((0, AZUL), (1, ROJO)):
             ax.scatter(X_te["hora"][y_te == c], X_te["velocidad"][y_te == c], s=34, facecolors="none", edgecolors=col, lw=1.4)
