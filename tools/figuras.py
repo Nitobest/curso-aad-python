@@ -2332,3 +2332,212 @@ def _activar_aviso_todo():
 
 
 _activar_aviso_todo()
+
+
+# ================================================================== M1 · S2–S3 — figuras pedagógicas (A) añadidas 6-oct-2026
+# Regla 6.4: la intuición se VE antes de correr el código, sobre datos pequeños o sintéticos.
+
+def _serie_sintetica(rng, n=48, base_rojo=1900, base_azul=1300, ruido=120):
+    rojo = base_rojo + rng.normal(0, ruido, n)
+    azul = base_azul + rng.normal(0, ruido * 0.8, n)
+    return rojo.clip(0), azul.clip(0)
+
+
+def tres_hipotesis(mes_corte=30, n=48):
+    """(A) Antes de ver la serie real: cómo se vería la gráfica de incidentes por mes bajo cada hipótesis.
+    (a) la ciudad se volvió más peligrosa → el rojo SUBE; (b) cambió el registro → el rojo sigue igual y el
+    azul DESAPARECE; (c) casualidad → nada cambia en el corte. Datos inventados: solo sirven para comparar formas."""
+    rng = np.random.default_rng(5)
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.0), sharey=True)
+    titulos = ["(a) la ciudad se volvió más peligrosa", "(b) cambió la forma de registrar", "(c) casualidad del árbol"]
+    x = np.arange(n)
+    for k, ax in enumerate(axes):
+        rojo, azul = _serie_sintetica(rng, n)
+        if k == 0:
+            rojo[mes_corte:] *= 1.7; azul[mes_corte:] *= 0.95
+        elif k == 1:
+            azul[mes_corte:] *= 0.02
+        ax.stackplot(x, rojo, azul, colors=[ROJO, AZUL], alpha=0.85, labels=["con víctimas", "solo daños"])
+        ax.axvline(mes_corte, color=NEGRO, ls="--", lw=1.2)
+        ax.set_ylim(0, 5600)
+        ax.text(mes_corte + 0.8, 5450, "el corte que\nencontró el árbol", fontsize=8.5, va="top", color=NEGRO)
+        ax.set_title(titulos[k], fontsize=11)
+        ax.set_xlabel("mes"); ax.set_xticks([])
+        for s in ("top", "right"): ax.spines[s].set_visible(False)
+    axes[0].set_ylabel("incidentes por mes"); axes[0].legend(loc="upper left", fontsize=8.5)
+    plt.tight_layout()
+    return _leyenda(fig, "cada hipótesis deja una huella distinta. Fíjese en el ROJO después del corte: ¿sube, sigue igual "
+                         "o no pasa nada? Con eso en la cabeza, mire ahora la serie real.")
+
+
+def imputar_y_marcar(valores=(6.25, None, 6.21, None, 6.30, 6.18)):
+    """(A) Qué hace 'imputar + marcar' con una columna que tiene vacíos: se rellena con la mediana Y se agrega una
+    columna falta_x de 0/1 para que el modelo sepa cuáles filas eran vacías."""
+    v = [np.nan if x is None else x for x in valores]
+    mediana = float(np.nanmedian(v))
+    fig, ax = plt.subplots(figsize=(12, 4.4)); ax.set_xlim(0, 24); ax.set_ylim(0, 8.8); ax.axis("off")
+    def tabla(x0, cols, filas, anchos, titulo, color_enc):
+        ax.text(x0 + sum(anchos) / 2, 8.3, titulo, ha="center", fontsize=11.5, fontweight="bold", color="#555555")
+        xs = np.cumsum([x0] + anchos)
+        for j, c in enumerate(cols):
+            ax.add_patch(plt.Rectangle((xs[j], 6.6), anchos[j], 0.9, fc=color_enc[j], ec="white", lw=2))
+            ax.text(xs[j] + anchos[j] / 2, 7.05, c, ha="center", va="center", color="white", fontsize=10, fontweight="bold")
+            for i, fila in enumerate(filas):
+                yy = 6.6 - (i + 1) * 0.9
+                val = fila[j]
+                vacio = isinstance(val, float) and np.isnan(val)
+                fc = "#FBECEA" if (vacio or (j > 0 and fila[0] == "x")) else ("#F7F8FA" if i % 2 else "white")
+                ax.add_patch(plt.Rectangle((xs[j], yy), anchos[j], 0.9, fc=fc, ec="white", lw=2))
+                texto = "NaN" if vacio else (f"{val:.2f}" if isinstance(val, float) else str(val))
+                ax.text(xs[j] + anchos[j] / 2, yy + 0.45, texto, ha="center", va="center", fontsize=10.5,
+                        color=ROJO if vacio else NEGRO, fontweight="bold" if vacio else "normal")
+    antes = [[x] for x in v]
+    tabla(0.5, ["latitud"], antes, [4.0], "Antes", [AZUL])
+    despues = []
+    for x in v:
+        if np.isnan(x):
+            despues.append([mediana, 1])
+        else:
+            despues.append([x, 0])
+    xs_d = 11.0
+    tabla(xs_d, ["latitud", "falta_coord"], despues, [4.0, 4.4], "Después: imputar + marcar", [AZUL, ROJO])
+    # marcar las celdas imputadas
+    for i, x in enumerate(v):
+        if np.isnan(x):
+            yy = 6.6 - (i + 1) * 0.9
+            ax.add_patch(plt.Rectangle((xs_d, yy), 4.0, 0.9, fc="none", ec=ROJO, lw=2))
+    ax.annotate("", xy=(xs_d - 0.3, 4.2), xytext=(5.0, 4.2), arrowprops=dict(arrowstyle="->", color=NEGRO, lw=2))
+    ax.text(8.0, 4.9, f"mediana = {mediana:.2f}", ha="center", va="bottom", fontsize=10.5, family="monospace", color=NEGRO)
+    ax.text(8.0, 3.6, "fillna(mediana)\n+ isna().astype(int)", ha="center", va="top", fontsize=9.5, family="monospace", color=GRIS)
+    ax.text(15.2, 0.55, "el modelo ve el valor típico Y sabe que esa fila venía vacía", ha="center", fontsize=10, color=ROJO)
+    return _leyenda(fig, "rellenar con la mediana evita botar filas; la columna de 0/1 conserva la información de que el dato "
+                         "faltaba (que a veces es lo que de verdad informa, como el N/D de hoy).")
+
+
+def memorizar_vs_aprender(n=260, semilla=11):
+    """(A) Sobreajuste con datos sintéticos de 2 variables: el mismo problema con un árbol corto y uno sin límite.
+    Puntos llenos = entrenamiento; puntos huecos = prueba. El árbol sin límite dibuja islas alrededor de cada punto
+    de entrenamiento y falla más en los huecos."""
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.model_selection import train_test_split
+    X, y = _datos_sinteticos(n, semilla)
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.4, random_state=semilla, stratify=y)
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.3), sharey=True)
+    configs = [(1, "demasiado simple"), (3, "justo"), (None, "memoriza")]
+    xx, yy = np.meshgrid(np.linspace(0, 24, 220), np.linspace(20, 100, 220))
+    malla = pd.DataFrame({"hora": xx.ravel(), "velocidad": yy.ravel()})
+    for ax, (d, nombre) in zip(axes, configs):
+        m = DecisionTreeClassifier(max_depth=d, random_state=0).fit(X_tr, y_tr)
+        z = m.predict_proba(malla)[:, 1].reshape(xx.shape)
+        ax.contourf(xx, yy, z, levels=[0, 0.5, 1], colors=["#DCE8F6", "#F6DCD9"])
+        ax.scatter(X_tr["hora"], X_tr["velocidad"], c=y_tr, cmap=CMAP_CLASES, s=18, edgecolor="white", lw=0.4)
+        for c, col in ((0, AZUL), (1, ROJO)):
+            ax.scatter(X_te["hora"][y_te == c], X_te["velocidad"][y_te == c], s=34, facecolors="none", edgecolors=col, lw=1.4)
+        a_tr, a_te = m.score(X_tr, y_tr), m.score(X_te, y_te)
+        etiqueta = "sin límite" if d is None else str(d)
+        ax.set_title(f"max_depth = {etiqueta} · {nombre}\nentrenamiento {a_tr:.2f} · prueba {a_te:.2f} · {m.get_n_leaves()} hojas", fontsize=10.5)
+        ax.set_xlabel("hora")
+    axes[0].set_ylabel("velocidad")
+    axes[0].scatter([], [], c=NEGRO, s=18, label="punto lleno = entrenamiento")
+    axes[0].scatter([], [], facecolors="none", edgecolors=NEGRO, s=34, label="punto hueco = prueba (nunca visto)")
+    axes[0].legend(loc="lower right", fontsize=8)
+    plt.tight_layout()
+    return _leyenda(fig, "a la derecha el fondo dibuja islas alrededor de puntos de entrenamiento sueltos: acierta todos los llenos "
+                         "y falla más huecos que el árbol del medio. Memorizar no es aprender.")
+
+
+def brecha_train_test():
+    """(A) La forma típica de la curva de error contra la complejidad: entrenamiento baja siempre; prueba baja, toca
+    un mínimo y vuelve a subir. Tres zonas: subajuste, punto justo, sobreajuste. Esquema, no datos reales."""
+    c = np.linspace(0.05, 1, 200)
+    tr = 0.55 * np.exp(-3.2 * c) + 0.05
+    te = 0.55 * np.exp(-3.2 * c) + 0.05 + 0.45 * (c - 0.35).clip(0) ** 1.6
+    fig, ax = plt.subplots(figsize=(11, 4.4))
+    ax.plot(c, tr, color=AZUL, lw=2.4, label="error en entrenamiento")
+    ax.plot(c, te, color=ROJO, lw=2.4, label="error en prueba")
+    i = int(np.argmin(te)); ax.axvline(c[i], color=NEGRO, ls="--", lw=1)
+    ax.axvspan(0, 0.2, color="#F7F8FA"); ax.axvspan(0.62, 1, color="#FBECEA", alpha=0.6)
+    ax.text(0.1, 0.52, "SUBAJUSTE\nmodelo demasiado simple:\nfalla en los dos", ha="center", fontsize=9.5, color="#555555")
+    ax.text(c[i], 0.52, "PUNTO JUSTO\nla prueba es mínima", ha="center", fontsize=9.5, color=NEGRO, fontweight="bold")
+    ax.text(0.81, 0.52, "SOBREAJUSTE\nentrenamiento sigue bajando,\nprueba vuelve a subir", ha="center", fontsize=9.5, color=ROJO)
+    ax.annotate("", xy=(0.85, tr[int(0.85 * 199)]), xytext=(0.85, te[int(0.85 * 199)]),
+                arrowprops=dict(arrowstyle="<->", color=NEGRO, lw=1.4))
+    ax.text(0.87, (tr[int(0.85 * 199)] + te[int(0.85 * 199)]) / 2, "la brecha:\nel síntoma", fontsize=9.5, va="center")
+    ax.set_xlabel("complejidad del modelo (profundidad del árbol, k, número de variables…)"); ax.set_ylabel("error")
+    ax.set_xticks([]); ax.set_yticks([]); ax.set_ylim(0, 0.65); ax.legend(loc="lower center", bbox_to_anchor=(0.45, 0.0))
+    ax.set_title("Más complejo no es mejor: la curva que se repite en todo el curso")
+    return _leyenda(fig, "el modelo que conviene está donde la curva ROJA es mínima, no donde la azul. Si hay brecha grande "
+                         "entre las dos, el modelo está memorizando.")
+
+
+def target_encoding_paso_a_paso(destacar_unicas=False):
+    """(A) Target encoding con una tabla de 8 incidentes: cada dirección se reemplaza por el promedio de la y en esa
+    dirección. Con destacar_unicas=True se marca el problema: la dirección que aparece una sola vez recibe su propia y."""
+    filas = [("Cra 43 # 10-20", 1), ("Cra 43 # 10-20", 0), ("Cra 43 # 10-20", 1), ("Cl 33 # 65-10", 0),
+             ("Cl 33 # 65-10", 0), ("Cl 80 # 50-12", 1), ("Cra 65 # 48-05", 0), ("Cl 10 # 42-30", 1)]
+    d = pd.DataFrame(filas, columns=["direccion", "con_victimas"])
+    conteo = d["direccion"].map(d["direccion"].value_counts())
+    d["tasa_dir"] = d.groupby("direccion")["con_victimas"].transform("mean")
+    fig, ax = plt.subplots(figsize=(13, 5.4)); ax.set_xlim(0, 26); ax.set_ylim(0, 10.8); ax.axis("off")
+    cols = ["direccion", "con_victimas (y)", "veces que aparece", "tasa_dir"]
+    anchos = [6.2, 4.2, 4.4, 4.0]; x0 = 0.6; xs = np.cumsum([x0] + anchos)
+    encab = [AZUL, ROJO, GRIS, MODULO[1]]
+    for j, c in enumerate(cols):
+        ax.add_patch(plt.Rectangle((xs[j], 9.0), anchos[j], 0.95, fc=encab[j], ec="white", lw=2))
+        ax.text(xs[j] + anchos[j] / 2, 9.47, c, ha="center", va="center", color="white", fontsize=10.5, fontweight="bold")
+    for i, (_, f) in enumerate(d.iterrows()):
+        yy = 9.0 - (i + 1) * 0.95
+        unica = conteo.iloc[i] == 1
+        resaltar = destacar_unicas and unica
+        valores = [f["direccion"], str(int(f["con_victimas"])), str(int(conteo.iloc[i])), f"{f['tasa_dir']:.2f}".replace(".", ",")]
+        for j, v in enumerate(valores):
+            fc = "#FBECEA" if resaltar else ("#F7F8FA" if i % 2 else "white")
+            ax.add_patch(plt.Rectangle((xs[j], yy), anchos[j], 0.95, fc=fc, ec="white", lw=2))
+            ax.text(xs[j] + anchos[j] / 2, yy + 0.47, v, ha="center", va="center", fontsize=10.5,
+                    color=ROJO if (resaltar and j in (1, 3)) else NEGRO, fontweight="bold" if (resaltar and j in (1, 3)) else "normal")
+        if resaltar:
+            ax.add_patch(plt.Rectangle((xs[0], yy), sum(anchos), 0.95, fc="none", ec=ROJO, lw=2))
+    xt = xs[-1] + 0.9
+    if not destacar_unicas:
+        ax.text(xt, 8.4, "La idea", fontsize=12.5, fontweight="bold", color=NEGRO)
+        ax.text(xt, 7.6, "Para cada dirección:\ntasa = promedio de la y\nde sus incidentes", fontsize=10.5, va="top", color=NEGRO)
+        ax.text(xt, 5.3, "Cra 43: (1 + 0 + 1) / 3 = 0,67\nCl 33: (0 + 0) / 2 = 0,00", fontsize=10, va="top", family="monospace", color="#555555")
+        ax.text(xt, 3.4, "Una columna numérica\nen vez de 30 000 dummies.\nSuena razonable…", fontsize=10.5, va="top", color=NEGRO)
+        ax.text(xt, 1.2, 'df.groupby("direccion")["con_victimas"].mean()', fontsize=8.5, family="monospace", color=GRIS)
+        ley = "cada dirección se resume en un número: la fracción de sus incidentes que tuvo víctimas. Es una técnica real (target encoding)."
+    else:
+        ax.text(xt, 8.4, "El problema", fontsize=12.5, fontweight="bold", color=ROJO)
+        ax.text(xt, 7.6, "Si la dirección aparece\nUNA sola vez, el promedio\nes de un solo incidente:", fontsize=10.5, va="top", color=NEGRO)
+        ax.text(xt, 5.1, "tasa_dir  =  y", fontsize=15, fontweight="bold", color=ROJO, family="monospace")
+        ax.text(xt, 4.1, "La columna nueva ES la\nrespuesta, copiada.\nY la mitad de las direcciones\nde Medellín aparece una vez.", fontsize=10.5, va="top", color=NEGRO)
+        ley = "en las filas rojas tasa_dir coincide exactamente con la y. El modelo no aprende sobre calles: lee la respuesta."
+    return _leyenda(fig, ley)
+
+
+def fit_solo_con_train():
+    """(A) La regla de oro del preprocesamiento: todo lo que se APRENDE de los datos (media, desviación, mediana, tasa por
+    categoría) se aprende con .fit() SOLO sobre entrenamiento, y luego se APLICA con .transform() a las dos partes."""
+    fig, ax = plt.subplots(figsize=(12.5, 4.8)); ax.set_xlim(0, 25); ax.set_ylim(0, 9.6); ax.axis("off")
+    def caja(x, y, w, h, t, fc, ec, color="white", fs=11, peso="bold"):
+        ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.25", fc=fc, ec=ec, lw=1.6))
+        ax.text(x + w / 2, y + h / 2, t, ha="center", va="center", color=color, fontsize=fs, fontweight=peso, linespacing=1.35)
+    caja(0.5, 5.6, 7.4, 2.6, "ENTRENAMIENTO\nX_train, y_train", AZUL, AZUL)
+    caja(0.5, 1.0, 7.4, 2.6, "PRUEBA\nX_test, y_test", ROJO, ROJO)
+    caja(10.3, 5.3, 6.6, 3.2, "lo aprendido\n\nmedia y desviación\nmediana · tasa por dirección", "white", NEGRO, color=NEGRO, fs=10, peso="normal")
+    ax.text(13.6, 8.85, ".fit(X_train)", ha="center", fontsize=11, family="monospace", color=AZUL, fontweight="bold")
+    caja(19.4, 5.6, 5.2, 2.6, "X_train\ntransformado", "#EEF3FA", AZUL, color=AZUL)
+    caja(19.4, 1.0, 5.2, 2.6, "X_test\ntransformado", "#FBECEA", ROJO, color=ROJO)
+    ax.annotate("", xy=(10.3, 6.9), xytext=(7.9, 6.9), arrowprops=dict(arrowstyle="-|>", color=AZUL, lw=2.4, mutation_scale=18))
+    ax.text(9.1, 7.3, "aprende", ha="center", fontsize=9.5, color=AZUL)
+    ax.annotate("", xy=(19.4, 6.9), xytext=(16.9, 6.9), arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=2, mutation_scale=18))
+    ax.text(18.15, 7.3, ".transform()", ha="center", fontsize=9.5, family="monospace", color=NEGRO)
+    ax.annotate("", xy=(19.4, 2.3), xytext=(13.6, 5.3), arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=2, mutation_scale=18,
+                                                                        connectionstyle="arc3,rad=-0.15"))
+    ax.text(15.0, 2.7, ".transform()", ha="center", fontsize=9.5, family="monospace", color=NEGRO)
+    ax.annotate("", xy=(10.3, 5.9), xytext=(7.9, 2.3), arrowprops=dict(arrowstyle="-|>", color=ROJO, lw=2.2, mutation_scale=18, ls="--"))
+    ax.text(8.5, 4.6, "NUNCA", ha="center", fontsize=11, color=ROJO, fontweight="bold", rotation=52,
+            bbox=dict(boxstyle="round,pad=.2", fc="white", ec="none"))
+    ax.text(12.5, 0.4, "La prueba se transforma con lo aprendido en entrenamiento; jamás aporta a lo aprendido.",
+            ha="center", fontsize=10.5, color=NEGRO)
+    return _leyenda(fig, "la flecha roja punteada es la que nunca debe existir. Si la prueba entra al .fit() de cualquier cosa "
+                         "—un escalador, una tasa, un modelo—, el examen deja de ser examen.")
