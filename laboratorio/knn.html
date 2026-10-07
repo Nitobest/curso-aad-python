@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k vecinos más cercanos · Laboratorio</title>
+<link rel="stylesheet" href="lab.css">
+<style>:root { --acento: var(--m2); }
+.leyenda { display: flex; gap: 14px; font-size: 12.5px; color: var(--suave); margin: 6px 4px 0; flex-wrap: wrap; }
+.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.votos { font-size: 15px; color: var(--texto); background: var(--panel2); border-radius: 10px; padding: 10px 12px; }
+.votos b { font-size: 18px; }</style>
+</head>
+<body>
+<div class="envoltura">
+  <header class="lab">
+    <div>
+      <div class="chip">Sesión 5 · Módulo 2 · Clasificación</div>
+      <h1>k-NN: dime con quién andas</h1>
+      <p class="sub">El algoritmo más simple del curso: para clasificar un cliente nuevo, busca los <b>k</b> clientes más parecidos que ya conoce y hace una <b>votación</b>. No aprende ninguna fórmula; solo memoriza y mide distancias. Y ahí está su trampa.</p>
+    </div>
+    <a class="volver" href="index.html">← Todos los laboratorios</a>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-v="mira"><span class="n">1</span>Mira</button>
+    <button data-v="juega"><span class="n">2</span>Juega</button>
+    <button data-v="reto"><span class="n">3</span>Reto 💥</button>
+  </nav>
+
+  <!-- ===================== MIRA ===================== -->
+  <section class="vista" id="mira">
+    <div class="lienzo"><canvas id="c-mira"></canvas>
+      <div class="leyenda"><span><i style="background:#4C8DDB"></i>no suscribió</span><span><i style="background:#E0645A"></i>suscribió</span><span><i style="background:#fff"></i>cliente nuevo (arrástrelo)</span></div></div>
+    <aside class="panel">
+      <h3>La votación</h3>
+      <p>200 clientes conocidos, con su <b>edad</b> y su <b>saldo</b> (ya escalados a 0–1). Llega un cliente nuevo: arrástrelo por el mapa y mire quiénes son sus vecinos.</p>
+      <div class="control"><label><span>k (cuántos vecinos votan)</span> <output id="m-k-o">7</output></label>
+        <input type="range" id="m-k" min="1" max="25" value="7" step="2"></div>
+      <div class="votos" id="m-votos"></div>
+      <p class="mirar"><b>Qué mirar:</b> el círculo encierra exactamente a los k más cercanos. Con k = 1 manda el vecino inmediato (y su ruido); con k grande mandan los "promedios" de la zona. k impar evita empates.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== JUEGA ===================== -->
+  <section class="vista" id="juega">
+    <div class="lienzo"><canvas id="c-juega"></canvas>
+      <div class="leyenda"><span>Fondo: lo que k-NN predice en cada punto del mapa</span><span>Puntos: datos de prueba (el modelo no los usó)</span></div></div>
+    <aside class="panel">
+      <h3>Suba y baje k</h3>
+      <div class="control"><label><span>k</span> <output id="j-k-o">7</output></label>
+        <input type="range" id="j-k" min="1" max="99" value="7" step="2"></div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="j-atr">—</div><div class="e">acc. entrenamiento</div></div>
+        <div class="cifra"><div class="v" id="j-ate">—</div><div class="e">acc. prueba</div></div>
+      </div>
+      <canvas id="c-j-curva"></canvas>
+      <p class="mirar"><b>Qué mirar:</b> con <b>k = 1</b> la frontera es un rompecabezas que rodea cada punto: acierta el 100 % en entrenamiento (¡cada punto es su propio vecino!) y menos en prueba. Con <b>k enorme</b> todo el mapa se vuelve del color mayoritario. El k bueno está en el medio, y se elige mirando la prueba, no el entrenamiento.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== RETO ===================== -->
+  <section class="vista" id="reto">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">Sin escalar: edad en años, saldo en miles de pesos</div><canvas id="c-r-crudo"></canvas></div>
+      <div><div class="etiqueta-lienzo" id="r-etq">Escalado: las dos variables de 0 a 1</div><canvas id="c-r-esc"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Predice antes de correr</h3>
+      <div class="reto">
+        <p class="pregunta">Los mismos datos, pero <b>sin escalar</b>: la edad va de 18 a 70 y el saldo de 0 a 20 000. Llega un cliente de <b>25 años con 8 000</b>. ¿Cómo serán sus 7 vecinos más cercanos?</p>
+        <div class="opciones" id="r-ops">
+          <button data-v="ambos">Parecidos en edad y en saldo</button>
+          <button data-v="saldo">Mismo saldo, edad cualquiera</button>
+          <button data-v="edad">Misma edad, saldo cualquiera</button>
+        </div>
+        <div class="botones" style="margin-top:10px"><button class="b primario" id="r-ver" disabled>Buscar los vecinos</button></div>
+        <div class="respuesta" id="r-resp"></div>
+      </div>
+      <div class="cifras" id="r-cifras" style="display:none">
+        <div class="cifra"><div class="v" id="r-acrudo">—</div><div class="e">acc. prueba sin escalar</div></div>
+        <div class="cifra"><div class="v" id="r-aesc">—</div><div class="e">acc. prueba escalado</div></div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="lab">Introducción al Análisis Avanzado de Datos con Python · Univalle · Datos simulados con la forma de Bank Marketing (Sesión 5): suscriben más los clientes con saldo alto y los muy jóvenes o mayores.</footer>
+</div>
+
+<script src="lab.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------ datos (u = edad escalada, v = saldo escalado)
+const EDAD = [18, 70], SALDO = [0, 20000];
+function datos(n, sem) { const r = azar(sem), P = [];
+  for (let i = 0; i < n; i++) { const u = r(), v = Math.min(1, Math.max(0, 0.35 + 0.28 * r.normal()));
+    const s = 2.6 * v + 2.2 * Math.abs(u - 0.5) - 1.8, p = 1 / (1 + Math.exp(-4 * s)); P.push({ u, v, y: r() < p ? 1 : 0 }); } return P; }
+const TR = datos(200, 5), TE = datos(200, 77);
+const crudo = (p) => [EDAD[0] + p.u * (EDAD[1] - EDAD[0]), SALDO[0] + p.v * (SALDO[1] - SALDO[0])];
+function vecinos(P, q, k, dist) { return P.map((p, i) => ({ i, d: dist(p, q) })).sort((a, b) => a.d - b.d).slice(0, k); }
+const dEsc = (p, q) => Math.hypot(p.u - q.u, p.v - q.v), dCrudo = (p, q) => { const a = crudo(p), b = crudo(q); return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+function predecir(P, q, k, dist) { const V = vecinos(P, q, k, dist); const si = V.reduce((s, v) => s + P[v.i].y, 0); return { V, si, no: V.length - si, y: si > V.length / 2 ? 1 : 0 }; }
+const acc = (P, Q, k, dist) => Q.reduce((s, q) => s + (predecir(P, q, k, dist).y === q.y), 0) / Q.length;
+
+// ------------------------------------------------------------ mapa escalado
+function marco(L) { L.margen = { l: 44, r: 12, t: 10, b: 36 }; const m = L.margen; return { sx: escala(0, 1, m.l, L.w - m.r), sy: escala(0, 1, L.h - m.b, m.t) }; }
+function base(L, cr) { if (!L.w) return; const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const s = marco(L);
+  ejes(L, s.sx, s.sy, cr ? { xt: [0, .25, .5, .75, 1], fx: (t) => fmt(EDAD[0] + t * 52, 0), yt: [0, .25, .5, .75, 1], fy: (t) => fmt(t * 20000, 0), xl: "edad (años)", yl: "saldo (miles de pesos)" }
+    : { xt: [0, .25, .5, .75, 1], fx: (t) => fmt(t, 2), yt: [0, .25, .5, .75, 1], fy: (t) => fmt(t, 2), xl: "edad (escalada)", yl: "saldo (escalado)" }); return s; }
+function puntos(L, s, P, r = 3.2, borde) { P.forEach((p) => punto(L.ctx, s.sx(p.u), s.sy(p.v), r, p.y ? COL.rojo : COL.azul, borde)); }
+function marcarVecinos(L, s, P, q, V, colorLinea = "rgba(255,255,255,.45)") { const { ctx } = L;
+  V.forEach((v) => { const p = P[v.i]; ctx.strokeStyle = colorLinea; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(s.sx(q.u), s.sy(q.v)); ctx.lineTo(s.sx(p.u), s.sy(p.v)); ctx.stroke();
+    punto(ctx, s.sx(p.u), s.sy(p.v), 5.5, p.y ? COL.rojo : COL.azul, "#FFFFFF"); });
+  punto(ctx, s.sx(q.u), s.sy(q.v), 7, "#FFFFFF", COL.m2); }
+
+// ------------------------------------------------------------ MIRA
+const LM = lienzo("c-mira", 0.68); const SM = { q: { u: 0.3, v: 0.55 }, k: 7, arrastrando: false };
+function mDibujar() { const s = base(LM); if (!s) return; const { ctx } = LM; puntos(LM, s, TR);
+  const R = predecir(TR, SM.q, SM.k, dEsc), rad = R.V[R.V.length - 1].d;
+  ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(s.sx(SM.q.u), s.sy(SM.q.v), rad * (s.sx(1) - s.sx(0)), rad * (s.sy(0) - s.sy(1)), 0, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+  marcarVecinos(LM, s, TR, SM.q, R.V);
+  document.getElementById("m-votos").innerHTML = `Votan ${SM.k} vecinos: <b style="color:${COL.rojo}">${R.si} sí</b> · <b style="color:${COL.azul}">${R.no} no</b> → predicción: <b>${R.y ? "suscribe" : "no suscribe"}</b> (p ≈ ${pct(R.si / SM.k)})`;
+  document.getElementById("m-k-o").textContent = SM.k; }
+LM.alDibujar = mDibujar;
+document.getElementById("m-k").oninput = (e) => { SM.k = +e.target.value; mDibujar(); };
+function mArrastrar(e) { const s = marco(LM), p = puntero(LM, e); SM.q = { u: Math.max(0, Math.min(1, s.sx.inv(p.x))), v: Math.max(0, Math.min(1, s.sy.inv(p.y))) }; mDibujar(); }
+LM.c.addEventListener("pointerdown", (e) => { SM.arrastrando = true; LM.c.setPointerCapture(e.pointerId); mArrastrar(e); });
+LM.c.addEventListener("pointermove", (e) => { if (SM.arrastrando) mArrastrar(e); });
+LM.c.addEventListener("pointerup", () => (SM.arrastrando = false));
+
+// ------------------------------------------------------------ JUEGA: la frontera según k
+const LJ = lienzo("c-juega", 0.68), LC = lienzo("c-j-curva", 0.55); const SJ = { k: 7 }; const G = 56, fondos = new Map();
+const KS = [1, 3, 5, 7, 11, 15, 21, 31, 51, 75, 99], CURVA = KS.map((k) => ({ k, tr: acc(TR, TR, k, dEsc), te: acc(TR, TE, k, dEsc) }));
+function fondo(k) { if (fondos.has(k)) return fondos.get(k); const F = new Float32Array(G * G);
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) { const R = predecir(TR, { u: (i + .5) / G, v: (j + .5) / G }, k, dEsc); F[i * G + j] = R.si / k; } fondos.set(k, F); return F; }
+function colorProb(p, a) { const c0 = [76, 141, 219], c1 = [224, 100, 90]; return `rgba(${Math.round(c0[0] + (c1[0] - c0[0]) * p)},${Math.round(c0[1] + (c1[1] - c0[1]) * p)},${Math.round(c0[2] + (c1[2] - c0[2]) * p)},${a})`; }
+function jDibujar() { const s = base(LJ); if (!s) return; const { ctx } = LJ, F = fondo(SJ.k), cw = (s.sx(1) - s.sx(0)) / G, ch = (s.sy(0) - s.sy(1)) / G;
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) { ctx.fillStyle = colorProb(F[i * G + j] >= 0.5 ? 0.8 : 0.2, 0.32); ctx.fillRect(s.sx(i / G), s.sy((j + 1) / G), cw + 0.5, ch + 0.5); }
+  puntos(LJ, s, TE, 3, "rgba(255,255,255,.5)");
+  document.getElementById("j-k-o").textContent = SJ.k; document.getElementById("j-atr").textContent = pct(acc(TR, TR, SJ.k, dEsc)); document.getElementById("j-ate").textContent = pct(acc(TR, TE, SJ.k, dEsc));
+  // curva accuracy vs k
+  const C = LC; if (!C.w) return; const g = C.ctx; g.clearRect(0, 0, C.w, C.h); C.margen = { l: 36, r: 8, t: 8, b: 26 }; const m = C.margen;
+  const sx = escala(0, Math.log(99), m.l, C.w - m.r), sy = escala(0.6, 1, C.h - m.b, m.t);
+  ejes(C, (k) => sx(Math.log(k)), sy, { xt: [1, 3, 7, 15, 31, 99], yt: [0.6, 0.8, 1], fy: (v) => pct(v), xl: "k" });
+  [["tr", COL.m1], ["te", COL.m3]].forEach(([key, c]) => { g.strokeStyle = c; g.lineWidth = 2; g.beginPath(); CURVA.forEach((p, i) => (i ? g.lineTo(sx(Math.log(p.k)), sy(p[key])) : g.moveTo(sx(Math.log(p.k)), sy(p[key])))); g.stroke(); });
+  g.strokeStyle = "rgba(255,255,255,.5)"; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(sx(Math.log(SJ.k)), m.t); g.lineTo(sx(Math.log(SJ.k)), C.h - m.b); g.stroke(); g.setLineDash([]);
+  g.font = "11px Inter, system-ui"; g.textAlign = "right"; g.fillStyle = COL.m1; g.fillText("entrenamiento", C.w - m.r - 4, m.t + 12); g.fillStyle = COL.m3; g.fillText("prueba", C.w - m.r - 4, m.t + 26); }
+LJ.alDibujar = LC.alDibujar = jDibujar;
+document.getElementById("j-k").oninput = (e) => { SJ.k = +e.target.value; jDibujar(); };
+
+// ------------------------------------------------------------ RETO: la escala
+const LRC = lienzo("c-r-crudo", 0.85), LRE = lienzo("c-r-esc", 0.85); const SR = { visto: false, elegido: null };
+const Q = { u: (25 - EDAD[0]) / 52, v: 8000 / 20000 }, K = 7;
+function rDibujar() { [[LRC, dCrudo, true], [LRE, dEsc, false]].forEach(([L, dist, cr]) => { const s = base(L, cr); if (!s) return; puntos(L, s, TR);
+    if (SR.visto) marcarVecinos(L, s, TR, Q, vecinos(TR, Q, K, dist)); else punto(L.ctx, s.sx(Q.u), s.sy(Q.v), 7, "#FFFFFF", COL.m2); }); }
+LRC.alDibujar = LRE.alDibujar = rDibujar;
+opciones("r-ops", (v) => { SR.elegido = v; document.getElementById("r-ver").disabled = false; });
+document.getElementById("r-ver").onclick = () => {
+  SR.visto = true; const aC = acc(TR, TE, K, dCrudo), aE = acc(TR, TE, K, dEsc), r = document.getElementById("r-resp");
+  const V = vecinos(TR, Q, K, dCrudo).map((v) => crudo(TR[v.i])), edades = V.map((c) => c[0]);
+  r.innerHTML = (SR.elegido === "saldo" ? '<span class="ok">Exacto.</span> ' : '<span class="no">Sorpresa:</span> ') +
+    `sin escalar, los 7 vecinos tienen casi el mismo saldo pero edades entre <b>${fmt(Math.min(...edades), 0)}</b> y <b>${fmt(Math.max(...edades), 0)}</b> años. ` +
+    "Una diferencia de 50 años cuenta igual que una de 50 pesos, así que la edad <b>desaparece</b> de la distancia: k-NN clasifica solo por saldo sin que nadie se lo pidiera. " +
+    `En prueba acierta el ${pct(aC)}; con las dos variables escaladas a 0–1, el ${pct(aE)}. Todo modelo que mide <b>distancias</b> (k-NN, K-means, PCA) necesita escalar antes; y el escalado se aprende con entrenamiento y se aplica a la prueba (Sesión 3).`;
+  r.classList.add("visible"); document.getElementById("r-acrudo").textContent = pct(aC); document.getElementById("r-aesc").textContent = pct(aE); document.getElementById("r-cifras").style.display = ""; rDibujar(); };
+
+pestanas(() => [LM, LJ, LC, LRC, LRE].forEach((L) => L.ajustar()));
+mDibujar(); jDibujar(); rDibujar();
+</script>
+</body>
+</html>

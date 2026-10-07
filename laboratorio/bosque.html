@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bosque aleatorio · Laboratorio</title>
+<link rel="stylesheet" href="lab.css">
+<style>:root { --acento: var(--m2); }
+.leyenda { display: flex; gap: 14px; font-size: 12.5px; color: var(--suave); margin: 6px 4px 0; flex-wrap: wrap; }
+.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }</style>
+</head>
+<body>
+<div class="envoltura">
+  <header class="lab">
+    <div>
+      <div class="chip">Sesión 6 · Módulo 2 · Árboles y bosques</div>
+      <h1>Bosque aleatorio: muchos árboles mejor que uno</h1>
+      <p class="sub">Un árbol solo memoriza el ruido (Sesión 1). La idea del bosque: entrenar <b>cientos de árboles distintos</b>, cada uno con una muestra distinta de los datos y mirando variables distintas, y dejar que <b>voten</b>. Los errores de cada uno son diferentes, así que al promediar se cancelan.</p>
+    </div>
+    <a class="volver" href="index.html">← Todos los laboratorios</a>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-v="mira"><span class="n">1</span>Mira</button>
+    <button data-v="juega"><span class="n">2</span>Juega</button>
+    <button data-v="reto"><span class="n">3</span>Reto 💥</button>
+  </nav>
+
+  <!-- ===================== MIRA ===================== -->
+  <section class="vista" id="mira">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo" id="m-etq1">Un árbol, con su muestra (resaltados: los que le tocaron)</div><canvas id="c-m-arbol"></canvas></div>
+      <div><div class="etiqueta-lienzo" id="m-etq2">El bosque hasta ahora (promedio de los votos)</div><canvas id="c-m-bosque"></canvas></div>
+    </div>
+      <div class="leyenda"><span><i style="background:#4C8DDB"></i>solo daños</span><span><i style="background:#E0645A"></i>con víctimas</span><span>Fondo: zonas que predice el árbol / el bosque</span></div></div>
+    <aside class="panel">
+      <h3>Un árbol a la vez</h3>
+      <p id="m-texto">Cada árbol del bosque se entrena con una <b>muestra con reemplazo</b> de los 300 incidentes (<i>bootstrap</i>): unos salen repetidos, cerca de un tercio no salen. Presione <b>Otro árbol</b>.</p>
+      <div class="botones">
+        <button class="b primario" id="m-otro">🌳 Otro árbol</button>
+        <button class="b" id="m-diez">+10 árboles</button>
+        <button class="b" id="m-reset">↺</button>
+      </div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="m-n">0</div><div class="e">árboles</div></div>
+        <div class="cifra"><div class="v" id="m-a1">—</div><div class="e">acc. prueba, este árbol</div></div>
+        <div class="cifra"><div class="v" id="m-ab">—</div><div class="e">acc. prueba, el bosque</div></div>
+      </div>
+      <p class="mirar"><b>Qué mirar:</b> cada árbol, sin límite de profundidad, dibuja rectángulos diminutos alrededor de sus puntos (sobreajusta). Pero cada uno sobreajusta <b>a puntos distintos</b>: al promediar, las zonas firmes se quedan y los rectángulos sueltos se diluyen.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== JUEGA ===================== -->
+  <section class="vista" id="juega">
+    <div class="lienzo"><canvas id="c-juega"></canvas>
+      <div class="leyenda"><span>Fondo: probabilidad de "con víctimas" según el bosque (azul 0 → rojo 1)</span><span>Puntos: datos de prueba</span></div></div>
+    <aside class="panel">
+      <h3>Las perillas del bosque</h3>
+      <div class="control"><label><span>Número de árboles</span> <output id="j-n-o">10</output></label>
+        <input type="range" id="j-n" min="1" max="100" value="10"></div>
+      <div class="control"><label><span>Profundidad máxima de cada árbol</span> <output id="j-d-o">sin límite</output></label>
+        <input type="range" id="j-d" min="1" max="12" value="12"></div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="j-atr">—</div><div class="e">acc. entrenamiento</div></div>
+        <div class="cifra"><div class="v" id="j-ate">—</div><div class="e">acc. prueba</div></div>
+      </div>
+      <canvas id="c-j-curva"></canvas>
+      <p class="mirar"><b>Qué mirar:</b> con pocos árboles el mapa es un mosaico; con muchos se vuelve <b>suave</b> y las probabilidades intermedias (morado) aparecen en las zonas dudosas. Más árboles nunca empeora la prueba: solo cuesta tiempo. La profundidad importa mucho menos que en un árbol solo.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== RETO ===================== -->
+  <section class="vista" id="reto">
+    <div class="lienzo"><div class="etiqueta-lienzo">Accuracy según el número de árboles (todos sin límite de profundidad)</div><canvas id="c-reto"></canvas></div>
+    <aside class="panel">
+      <h3>Predice antes de correr</h3>
+      <div class="reto">
+        <p class="pregunta">Un árbol <b>sin límite de profundidad</b> acierta el 100 % en entrenamiento y solo el <b id="r-a1">—</b> en prueba: sobreajusta. Si ponemos <b>100 árboles sin límite</b> a votar, ¿qué pasa en la prueba?</p>
+        <div class="opciones" id="r-ops">
+          <button data-v="peor">Peor: 100 veces más sobreajuste</button>
+          <button data-v="igual">Igual: siguen memorizando</button>
+          <button data-v="mejor">Mejor, claramente</button>
+        </div>
+        <div class="botones" style="margin-top:10px"><button class="b primario" id="r-ver" disabled>Entrenar los 100 árboles</button></div>
+        <div class="respuesta" id="r-resp"></div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="lab">Introducción al Análisis Avanzado de Datos con Python · Univalle · Datos simulados con la forma de los incidentes viales de Medellín (Sesión 1): más graves a alta velocidad, y de madrugada basta con menos velocidad (la frontera real es una diagonal, que un árbol solo puede imitar con escalones).</footer>
+</div>
+
+<script src="lab.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------ datos y árbol CART (el de la Sesión 1) con bootstrap y variable al azar por corte
+function datos(n, sem) { const r = azar(sem), P = [];
+  for (let i = 0; i < n; i++) { const h = r.entre(0, 24), v = r.entre(20, 100);
+    const p = 0.12 + 0.76 * (v > 40 + 2 * h); P.push({ x: [h, v], y: r() < p ? 1 : 0 }); } return P; }
+const TR = datos(300, 7), TE = datos(300, 99);
+const gini = (n1, n) => (n ? 1 - (n1 / n) ** 2 - (1 - n1 / n) ** 2 : 0);
+function cortes(P, f) { const S = P.slice().sort((a, b) => a.x[f] - b.x[f]), n = P.length, n1 = P.reduce((s, p) => s + p.y, 0), R = []; let l1 = 0;
+  for (let i = 0; i < n - 1; i++) { l1 += S[i].y; if (S[i].x[f] === S[i + 1].x[f]) continue;
+    const nl = i + 1, nr = n - nl; R.push({ t: (S[i].x[f] + S[i + 1].x[f]) / 2, g: (nl * gini(l1, nl) + nr * gini(n1 - l1, nr)) / n }); } return R; }
+function mejorCorte(P, fs) { let b = null; fs.forEach((f) => cortes(P, f).forEach((c) => { if (!b || c.g < b.g - 1e-12) b = { f, t: c.t, g: c.g }; })); return b; }
+function crecer(P, prof, max, r) {
+  const n1 = P.reduce((s, p) => s + p.y, 0), nodo = { n: P.length, p: n1 / P.length };
+  if (prof >= max || n1 === 0 || n1 === P.length) return nodo;
+  const fs = r ? [r() < 0.5 ? 0 : 1] : [0, 1];   // bosque: en cada corte mira una sola variable, elegida al azar
+  const c = mejorCorte(P, fs) || mejorCorte(P, [0, 1]); if (!c || c.g >= gini(n1, P.length) - 1e-12) return nodo;
+  nodo.f = c.f; nodo.t = c.t; nodo.izq = crecer(P.filter((p) => p.x[c.f] <= c.t), prof + 1, max, r); nodo.der = crecer(P.filter((p) => p.x[c.f] > c.t), prof + 1, max, r); return nodo; }
+const pred = (nd, x) => (nd.izq ? pred(x[nd.f] <= nd.t ? nd.izq : nd.der, x) : nd.p);
+function arbolBootstrap(i, max) { const r = azar(1000 + i), M = Array.from({ length: TR.length }, () => TR[Math.floor(r() * TR.length)]); return { T: crecer(M, 0, max, r), M }; }
+const cacheB = new Map();
+function bosque(n, max) { const k = max; if (!cacheB.has(k)) cacheB.set(k, []); const B = cacheB.get(k); while (B.length < n) B.push(arbolBootstrap(B.length, max)); return B.slice(0, n); }
+const probB = (B, x) => B.reduce((s, b) => s + (pred(b.T, x) >= 0.5 ? 1 : 0), 0) / B.length;   // voto por mayoría
+const accT = (T, P) => P.reduce((s, p) => s + ((pred(T, p.x) >= 0.5 ? 1 : 0) === p.y), 0) / P.length;
+const accB = (B, P) => P.reduce((s, p) => s + ((probB(B, p.x) >= 0.5 ? 1 : 0) === p.y), 0) / P.length;
+
+// ------------------------------------------------------------ dibujo
+function marco(L) { L.margen = { l: 44, r: 12, t: 10, b: 36 }; const m = L.margen; return { sx: escala(0, 24, m.l, L.w - m.r), sy: escala(20, 100, L.h - m.b, m.t) }; }
+function colorProb(p, a) { const c0 = [76, 141, 219], c1 = [224, 100, 90]; return `rgba(${Math.round(c0[0] + (c1[0] - c0[0]) * p)},${Math.round(c0[1] + (c1[1] - c0[1]) * p)},${Math.round(c0[2] + (c1[2] - c0[2]) * p)},${a})`; }
+function zonas(L, s, nd, x0 = 0, x1 = 24, y0 = 20, y1 = 100) { const { ctx } = L;
+  if (!nd.izq) { ctx.fillStyle = colorProb(nd.p >= 0.5 ? 0.85 : 0.15, 0.30); ctx.fillRect(s.sx(x0), s.sy(y1), s.sx(x1) - s.sx(x0), s.sy(y0) - s.sy(y1)); return; }
+  if (nd.f === 0) { zonas(L, s, nd.izq, x0, nd.t, y0, y1); zonas(L, s, nd.der, nd.t, x1, y0, y1); } else { zonas(L, s, nd.izq, x0, x1, y0, nd.t); zonas(L, s, nd.der, x0, x1, nd.t, y1); } }
+const G = 48;
+function fondoBosque(L, s, B, suave) { const { ctx } = L, cw = (s.sx(24) - s.sx(0)) / G, ch = (s.sy(20) - s.sy(100)) / G;
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) { const p = probB(B, [(i + .5) / G * 24, 20 + (j + .5) / G * 80]);
+    ctx.fillStyle = colorProb(suave ? p : (p >= 0.5 ? 0.85 : 0.15), 0.32); ctx.fillRect(s.sx(i / G * 24), s.sy(20 + (j + 1) / G * 80), cw + 0.5, ch + 0.5); } }
+function base(L) { if (!L.w) return; L.ctx.clearRect(0, 0, L.w, L.h); return marco(L); }
+function ejesMapa(L, s) { ejes(L, s.sx, s.sy, { xt: [0, 6, 12, 18, 24], yt: [20, 40, 60, 80, 100], xl: "hora del día", yl: "velocidad (km/h)" }); }
+function puntos(L, s, P, r = 3, borde, alpha) { P.forEach((p) => punto(L.ctx, s.sx(p.x[0]), s.sy(p.x[1]), r, alpha ? (p.y ? "rgba(224,100,90,.2)" : "rgba(76,141,219,.2)") : (p.y ? COL.rojo : COL.azul), borde)); }
+
+// ------------------------------------------------------------ MIRA
+const LA = lienzo("c-m-arbol", 0.85), LB = lienzo("c-m-bosque", 0.85); const SM = { n: 0 };
+function mDibujar() { const sa = base(LA), sb = base(LB); if (!sa || !sb) return; const B = bosque(Math.max(1, SM.n), 99);
+  if (SM.n) { const u = B[SM.n - 1]; zonas(LA, sa, u.T); ejesMapa(LA, sa); puntos(LA, sa, TR, 2.6, null, true); puntos(LA, sa, u.M, 3.2, "rgba(255,255,255,.6)");
+    fondoBosque(LB, sb, B, true); ejesMapa(LB, sb); puntos(LB, sb, TE, 2.6);
+    document.getElementById("m-a1").textContent = pct(accT(u.T, TE)); document.getElementById("m-ab").textContent = pct(accB(B, TE)); }
+  else { ejesMapa(LA, sa); puntos(LA, sa, TR); ejesMapa(LB, sb); puntos(LB, sb, TE); document.getElementById("m-a1").textContent = document.getElementById("m-ab").textContent = "—"; }
+  document.getElementById("m-n").textContent = SM.n; document.getElementById("m-etq1").textContent = SM.n ? `Árbol #${SM.n} con su muestra (resaltados: los que le tocaron)` : "Los 300 incidentes de entrenamiento";
+  document.getElementById("m-etq2").textContent = SM.n ? `El bosque hasta ahora: ${SM.n} ${SM.n === 1 ? "árbol" : "árboles"} votando (puntos: prueba)` : "Datos de prueba (el bosque no los ve)"; }
+LA.alDibujar = LB.alDibujar = mDibujar;
+const TEXTOS_M = ["<b>Árbol #1.</b> Fíjese en los puntos atenuados: no le tocaron en la muestra. Y en los rectángulos diminutos: este árbol no tiene límite de profundidad y memoriza cada punto suyo.",
+  "<b>Árbol #2.</b> Otra muestra, otro árbol: sus rectángulos están en otros lugares. A la derecha, el bosque ya es el promedio de dos opiniones distintas.",
+  "<b>Árbol #3.</b> Además de la muestra, en cada corte el árbol solo puede mirar <b>una</b> de las dos variables, elegida al azar. Eso lo obliga a ser distinto de los demás."];
+function mSumar(k) { SM.n = Math.min(100, SM.n + k); document.getElementById("m-texto").innerHTML = SM.n <= 3 ? TEXTOS_M[SM.n - 1] : `<b>${SM.n} árboles.</b> Las zonas donde todos coinciden (arriba a la izquierda: madrugada y alta velocidad) quedan firmes; los rectángulos sueltos de cada árbol se diluyen en el promedio. Compare el acierto de este árbol solo con el del bosque.`; mDibujar(); }
+document.getElementById("m-otro").onclick = () => mSumar(1); document.getElementById("m-diez").onclick = () => mSumar(10);
+document.getElementById("m-reset").onclick = () => { SM.n = 0; document.getElementById("m-texto").innerHTML = "Cada árbol del bosque se entrena con una <b>muestra con reemplazo</b> de los 300 incidentes (<i>bootstrap</i>): unos salen repetidos, cerca de un tercio no salen. Presione <b>Otro árbol</b>."; mDibujar(); };
+
+// ------------------------------------------------------------ JUEGA
+const LJ = lienzo("c-juega", 0.66), LC = lienzo("c-j-curva", 0.55); const SJ = { n: 10, d: 99 }; const NS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100], curvas = new Map();
+function curva(d) { if (!curvas.has(d)) { const B = bosque(100, d); curvas.set(d, NS.map((n) => { const b = B.slice(0, n); return { n, tr: accB(b, TR), te: accB(b, TE) }; })); } return curvas.get(d); }
+function jDibujar() { const s = base(LJ); if (!s) return; const B = bosque(SJ.n, SJ.d); fondoBosque(LJ, s, B, true); ejesMapa(LJ, s); puntos(LJ, s, TE, 3, "rgba(255,255,255,.45)");
+  document.getElementById("j-n-o").textContent = SJ.n; document.getElementById("j-d-o").textContent = SJ.d === 99 ? "sin límite" : SJ.d;
+  document.getElementById("j-atr").textContent = pct(accB(B, TR)); document.getElementById("j-ate").textContent = pct(accB(B, TE));
+  const C = LC; if (!C.w) return; const g = C.ctx; g.clearRect(0, 0, C.w, C.h); C.margen = { l: 36, r: 8, t: 8, b: 26 }; const m = C.margen, cv = curva(SJ.d);
+  const sx = escala(0, Math.log(100), m.l, C.w - m.r), sy = escala(0.6, 1, C.h - m.b, m.t);
+  ejes(C, (n) => sx(Math.log(n)), sy, { xt: [1, 3, 10, 30, 100], yt: [0.6, 0.8, 1], fy: (v) => pct(v), xl: "número de árboles" });
+  [["tr", COL.m1], ["te", COL.m3]].forEach(([k, c]) => { g.strokeStyle = c; g.lineWidth = 2; g.beginPath(); cv.forEach((p, i) => (i ? g.lineTo(sx(Math.log(p.n)), sy(p[k])) : g.moveTo(sx(Math.log(p.n)), sy(p[k])))); g.stroke(); });
+  g.strokeStyle = "rgba(255,255,255,.5)"; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(sx(Math.log(SJ.n)), m.t); g.lineTo(sx(Math.log(SJ.n)), C.h - m.b); g.stroke(); g.setLineDash([]);
+  g.font = "11px Inter, system-ui"; g.textAlign = "right"; g.fillStyle = COL.m1; g.fillText("entrenamiento", C.w - m.r - 4, C.h - m.b - 18); g.fillStyle = COL.m3; g.fillText("prueba", C.w - m.r - 4, C.h - m.b - 5); }
+LJ.alDibujar = LC.alDibujar = jDibujar;
+document.getElementById("j-n").oninput = (e) => { SJ.n = +e.target.value; jDibujar(); };
+document.getElementById("j-d").oninput = (e) => { SJ.d = +e.target.value === 12 ? 99 : +e.target.value; jDibujar(); };
+
+// ------------------------------------------------------------ RETO
+const LR = lienzo("c-reto", 0.5); const SR = { visto: false, elegido: null }; const UNO = crecer(TR, 0, 99, null), A1 = accT(UNO, TE);
+document.getElementById("r-a1").textContent = pct(A1);
+function rDibujar() { if (!LR.w) return; const { ctx } = LR; ctx.clearRect(0, 0, LR.w, LR.h); LR.margen = { l: 44, r: 14, t: 16, b: 36 }; const m = LR.margen;
+  const sx = escala(0, Math.log(100), m.l, LR.w - m.r), sy = escala(0.6, 1.02, LR.h - m.b, m.t);
+  ejes(LR, (n) => sx(Math.log(n)), sy, { xt: [1, 2, 3, 5, 10, 20, 50, 100], yt: [0.6, 0.7, 0.8, 0.9, 1], fy: (v) => pct(v), xl: "número de árboles (sin límite de profundidad)" });
+  if (!SR.visto) { ctx.fillStyle = COL.tenue; ctx.font = "14px Inter, system-ui"; ctx.textAlign = "center"; ctx.fillText("Haga su predicción →", LR.w / 2, LR.h / 2); return; }
+  const cv = curva(99); [["tr", COL.m1, "entrenamiento"], ["te", COL.m3, "prueba (datos nuevos)"]].forEach(([k, c, nombre], j) => { ctx.strokeStyle = c; ctx.lineWidth = 2.4; ctx.beginPath();
+    cv.forEach((p, i) => (i ? ctx.lineTo(sx(Math.log(p.n)), sy(p[k])) : ctx.moveTo(sx(Math.log(p.n)), sy(p[k])))); ctx.stroke(); cv.forEach((p) => punto(ctx, sx(Math.log(p.n)), sy(p[k]), 3, c));
+    ctx.fillStyle = c; ctx.font = "12px Inter, system-ui"; ctx.textAlign = "left"; ctx.fillText(nombre, m.l + 10, LR.h - m.b - 30 + 16 * j); });
+  ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(sx(0), sy(A1)); ctx.lineTo(sx(Math.log(100)), sy(A1)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = COL.suave; ctx.textAlign = "right"; ctx.fillText("un solo árbol, en prueba", sx(Math.log(100)), sy(A1) + 14); }
+LR.alDibujar = rDibujar;
+opciones("r-ops", (v) => { SR.elegido = v; document.getElementById("r-ver").disabled = false; });
+document.getElementById("r-ver").onclick = () => { SR.visto = true; const cv = curva(99), f = cv[cv.length - 1], r = document.getElementById("r-resp");
+  r.innerHTML = (SR.elegido === "mejor" ? '<span class="ok">Exacto.</span> ' : '<span class="no">Sorpresa:</span> ') +
+    `con 100 árboles, la prueba sube de ${pct(A1)} a <b>${pct(f.te)}</b>, y el entrenamiento sigue en ${pct(f.tr)}. Cada árbol sigue memorizando su muestra, pero memoriza <b>ruido distinto</b>: ` +
+    "al votar, el ruido se cancela y lo que todos vieron (la franja diagonal) se queda; los escalones de 100 árboles, promediados, se vuelven una frontera casi lisa. Por eso el bosque casi no necesita que le limiten la profundidad, " +
+    "y por eso la curva se aplana: después de ~30 árboles, agregar más ya no cambia el voto. El precio: 100 árboles son 100 veces más lentos y no se pueden leer como reglas.";
+  r.classList.add("visible"); rDibujar(); };
+
+pestanas(() => [LA, LB, LJ, LC, LR].forEach((L) => L.ajustar()));
+mDibujar(); jDibujar(); rDibujar();
+</script>
+</body>
+</html>

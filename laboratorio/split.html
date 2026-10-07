@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrenar y probar sin trampa · Laboratorio</title>
+<link rel="stylesheet" href="lab.css">
+<style>:root { --acento: var(--m1); }
+.leyenda { display: flex; gap: 14px; font-size: 12.5px; color: var(--suave); margin: 6px 4px 0; flex-wrap: wrap; }
+.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.leyenda i.cuadro { border-radius: 2px; }</style>
+</head>
+<body>
+<div class="envoltura">
+  <header class="lab">
+    <div>
+      <div class="chip">Sesión 3 · Módulo 1 · Evaluar sin engañarse</div>
+      <h1>Entrenar, probar y no hacerse trampa</h1>
+      <p class="sub">Un modelo se evalúa con datos que <b>nunca vio</b>. Suena obvio, pero la trampa se cuela por lugares inesperados: por la partición que tocó en suerte y por variables que "saben" la respuesta.</p>
+    </div>
+    <a class="volver" href="index.html">← Todos los laboratorios</a>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-v="mira"><span class="n">1</span>Mira</button>
+    <button data-v="juega"><span class="n">2</span>Juega</button>
+    <button data-v="reto"><span class="n">3</span>Reto 💥</button>
+  </nav>
+
+  <!-- ===================== MIRA ===================== -->
+  <section class="vista" id="mira">
+    <div class="lienzo"><canvas id="c-mira"></canvas>
+      <div class="leyenda"><span><i style="background:#4C8DDB"></i>solo daños</span><span><i style="background:#E0645A"></i>con víctimas</span><span><i class="cuadro" style="background:rgba(255,255,255,.18);border:1px solid #fff"></i>apartados para la prueba</span></div></div>
+    <aside class="panel">
+      <h3>Separar antes de entrenar</h3>
+      <p id="m-texto">600 incidentes con su <b>hora</b> y <b>velocidad</b>. Queremos saber qué tan bien va a predecir el modelo con incidentes <b>futuros</b>. Presione <b>Siguiente</b>.</p>
+      <div class="botones">
+        <button class="b primario" id="m-sig">Siguiente</button>
+        <button class="b" id="m-reset">↺ Empezar</button>
+      </div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="m-ntr">—</div><div class="e">entrenamiento</div></div>
+        <div class="cifra"><div class="v" id="m-nte">—</div><div class="e">prueba</div></div>
+        <div class="cifra"><div class="v" id="m-atr">—</div><div class="e">acc. entrenamiento</div></div>
+        <div class="cifra"><div class="v" id="m-ate">—</div><div class="e">acc. prueba</div></div>
+      </div>
+      <p class="mirar" id="m-mirar"><b>Qué mirar:</b> los datos de prueba se apartan <b>antes</b> de que el modelo exista. Son el "examen sorpresa": el modelo no los ve hasta el final.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== JUEGA ===================== -->
+  <section class="vista" id="juega">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo" id="j-etq">Esta partición (resaltados: prueba)</div><canvas id="c-j-mapa"></canvas></div>
+      <div><div class="etiqueta-lienzo">Accuracy en prueba de 40 particiones distintas</div><canvas id="c-j-hist"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>La lotería de la partición</h3>
+      <p>El mismo modelo (árbol de profundidad 6), los mismos 600 datos. Lo único que cambia es <b>qué filas</b> quedan en la prueba.</p>
+      <div class="control"><label><span>Tamaño de la prueba</span> <output id="j-p-o">20 %</output></label>
+        <input type="range" id="j-p" min="5" max="50" value="20" step="5"></div>
+      <div class="botones"><button class="b primario" id="j-otra">🎲 Otra partición</button></div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="j-ate">—</div><div class="e">acc. prueba (esta)</div></div>
+        <div class="cifra"><div class="v" id="j-rango">—</div><div class="e">rango en 40 particiones</div></div>
+      </div>
+      <p class="mirar" id="j-mirar"><b>Qué mirar:</b> con una sola partición, el número que reporta tiene <b>suerte</b> adentro. Con una prueba pequeña, la suerte pesa más. En la Sesión 10 lo arreglamos repitiendo la partición (validación cruzada).</p>
+    </aside>
+  </section>
+
+  <!-- ===================== RETO ===================== -->
+  <section class="vista" id="reto">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">Accuracy en prueba según las variables usadas</div><canvas id="c-r-barras"></canvas></div>
+      <div><div class="etiqueta-lienzo" id="r-etq">Cómo se fabricó la variable "mágica"</div><canvas id="c-r-esq"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Predice antes de correr</h3>
+      <div class="reto">
+        <p class="pregunta">Cada incidente tiene una <b>dirección</b> (casi todas distintas, como en los datos reales). Fabricamos una variable nueva: <i>"% de incidentes graves en esa dirección"</i>, calculada con <b>todos</b> los 600 datos, y se la damos al árbol. Con hora y velocidad el árbol acierta ~<span id="r-base">75 %</span> en prueba. ¿Con la variable nueva?</p>
+        <div class="opciones" id="r-ops">
+          <button data-v="igual">Más o menos igual</button>
+          <button data-v="poco">Algo mejor (80–85 %)</button>
+          <button data-v="mucho">Casi perfecto (&gt; 90 %)</button>
+        </div>
+        <div class="botones" style="margin-top:10px"><button class="b primario" id="r-ver" disabled>Entrenar con la variable mágica</button></div>
+        <div class="respuesta" id="r-resp"></div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="lab">Introducción al Análisis Avanzado de Datos con Python · Univalle · Datos simulados con la forma de los incidentes viales de Medellín (Sesión 1): más graves de madrugada y a alta velocidad; la dirección casi no informa.</footer>
+</div>
+
+<script src="lab.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------ datos: 600 incidentes con dirección
+const N = 600, N_DIR = 480;
+function datos(n, sem) { const r = azar(sem), P = [];
+  for (let i = 0; i < n; i++) { const h = r.entre(0, 24), v = r.entre(20, 100), d = Math.floor(r() * N_DIR);
+    const p = 0.15 + 0.6 * ((h < 6) || (v > 70)) + 0.15 * ((h < 6) && (v > 70)); P.push({ x: [h, v], d, y: r() < p ? 1 : 0, i }); }
+  return P; }
+const TODOS = datos(N, 11), NOMBRES = ["hora", "velocidad", "mágica"];
+function barajar(P, sem) { const r = azar(sem), S = P.slice(); for (let i = S.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [S[i], S[j]] = [S[j], S[i]]; } return S; }
+function partir(sem, pTest) { const S = barajar(TODOS, sem), nte = Math.round(N * pTest); return { te: S.slice(0, nte), tr: S.slice(nte) }; }
+
+// ------------------------------------------------------------ árbol CART con Gini (igual al de la Sesión 1)
+const gini = (n1, n) => (n ? 1 - (n1 / n) ** 2 - (1 - n1 / n) ** 2 : 0);
+function cortes(P, f) { const S = P.slice().sort((a, b) => a.x[f] - b.x[f]), n = P.length, n1 = P.reduce((s, p) => s + p.y, 0), R = []; let l1 = 0;
+  for (let i = 0; i < n - 1; i++) { l1 += S[i].y; if (S[i].x[f] === S[i + 1].x[f]) continue;
+    const nl = i + 1, nr = n - nl; R.push({ t: (S[i].x[f] + S[i + 1].x[f]) / 2, g: (nl * gini(l1, nl) + nr * gini(n1 - l1, nr)) / n }); }
+  return R; }
+function mejorCorte(P, nf) { let b = null; for (let f = 0; f < nf; f++) cortes(P, f).forEach((c) => { if (!b || c.g < b.g - 1e-12) b = { f, t: c.t, g: c.g }; }); return b; }
+function crecer(P, prof, max, nf = 2) {
+  const n1 = P.reduce((s, p) => s + p.y, 0), nodo = { n: P.length, p: n1 / P.length, prof };
+  if (prof >= max || n1 === 0 || n1 === P.length) return nodo;
+  const c = mejorCorte(P, nf); if (!c || c.g >= gini(n1, P.length) - 1e-12) return nodo;
+  nodo.f = c.f; nodo.t = c.t;
+  nodo.izq = crecer(P.filter((p) => p.x[c.f] <= c.t), prof + 1, max, nf); nodo.der = crecer(P.filter((p) => p.x[c.f] > c.t), prof + 1, max, nf);
+  return nodo; }
+const pred = (nd, x) => (nd.izq ? pred(x[nd.f] <= nd.t ? nd.izq : nd.der, x) : nd.p);
+const acc = (T, P) => P.reduce((s, p) => s + ((pred(T, p.x) >= 0.5 ? 1 : 0) === p.y), 0) / P.length;
+
+// ------------------------------------------------------------ mapa
+function marcoMapa(L) { L.margen = { l: 44, r: 12, t: 10, b: 36 }; const m = L.margen;
+  return { sx: escala(0, 24, m.l, L.w - m.r), sy: escala(20, 100, L.h - m.b, m.t) }; }
+function colorProb(p, a) { const c0 = [76, 141, 219], c1 = [224, 100, 90];
+  return `rgba(${Math.round(c0[0] + (c1[0] - c0[0]) * p)},${Math.round(c0[1] + (c1[1] - c0[1]) * p)},${Math.round(c0[2] + (c1[2] - c0[2]) * p)},${a})`; }
+function zonas(L, s, nd, x0 = 0, x1 = 24, y0 = 20, y1 = 100) {
+  const { ctx } = L;
+  if (!nd.izq) { ctx.fillStyle = colorProb(nd.p, 0.30); ctx.fillRect(s.sx(x0), s.sy(y1), s.sx(x1) - s.sx(x0), s.sy(y0) - s.sy(y1)); return; }
+  if (nd.f === 0) { zonas(L, s, nd.izq, x0, nd.t, y0, y1); zonas(L, s, nd.der, nd.t, x1, y0, y1); }
+  else { zonas(L, s, nd.izq, x0, x1, y0, nd.t); zonas(L, s, nd.der, x0, x1, nd.t, y1); }
+}
+// Dibuja el mapa: tr = puntos normales, te = puntos resaltados (con aro blanco), T = árbol (zonas), apagar = puntos atenuados
+function mapa(L, { tr = [], te = [], T = null, apagar = [] }) {
+  if (!L.w) return; const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const s = marcoMapa(L);
+  if (T) zonas(L, s, T);
+  ejes(L, s.sx, s.sy, { xt: [0, 6, 12, 18, 24], yt: [20, 40, 60, 80, 100], xl: "hora del día", yl: "velocidad (km/h)" });
+  apagar.forEach((p) => punto(ctx, s.sx(p.x[0]), s.sy(p.x[1]), 2.6, p.y ? "rgba(224,100,90,.18)" : "rgba(76,141,219,.18)"));
+  tr.forEach((p) => punto(ctx, s.sx(p.x[0]), s.sy(p.x[1]), 2.8, p.y ? COL.rojo : COL.azul));
+  te.forEach((p) => punto(ctx, s.sx(p.x[0]), s.sy(p.x[1]), 3.6, p.y ? COL.rojo : COL.azul, "#FFFFFF"));
+  return s;
+}
+
+// ------------------------------------------------------------ MIRA: cinco pasos
+const LM = lienzo("c-mira", 0.66); let paso = 0; const PM = partir(3, 0.2); const TM = crecer(PM.tr, 0, 4);
+const TEXTOS_M = [
+  "600 incidentes con su <b>hora</b> y <b>velocidad</b>. Queremos saber qué tan bien va a predecir el modelo con incidentes <b>futuros</b>. Presione <b>Siguiente</b>.",
+  "<b>1. Barajar y apartar.</b> Al azar, el 20 % de las filas (120) se marca como <b>prueba</b> y se guarda bajo llave. Todavía no hay modelo.",
+  "<b>2. Entrenar solo con el 80 %.</b> El árbol busca sus cortes mirando únicamente los 480 de entrenamiento. Los de prueba ni siquiera existen para él.",
+  "<b>3. Medir en entrenamiento.</b> Acierta mucho… pero son los datos que ya vio. Es como calificar un examen con las mismas preguntas que practicó.",
+  "<b>4. Medir en prueba.</b> Ahora sí: los 120 que nunca vio. Este número es el que vale, y casi siempre es <b>más bajo</b> que el anterior.",
+];
+function mDibujar() {
+  const o = paso === 0 ? { tr: TODOS } : paso === 1 ? { tr: PM.tr, te: PM.te } : paso === 2 ? { tr: PM.tr, T: TM, apagar: PM.te }
+    : paso === 3 ? { tr: PM.tr, T: TM, apagar: PM.te } : { te: PM.te, T: TM, apagar: PM.tr };
+  mapa(LM, o);
+  const g = (id, v) => (document.getElementById(id).textContent = v);
+  g("m-ntr", paso >= 1 ? PM.tr.length : "—"); g("m-nte", paso >= 1 ? PM.te.length : "—");
+  g("m-atr", paso >= 3 ? pct(acc(TM, PM.tr)) : "—"); g("m-ate", paso >= 4 ? pct(acc(TM, PM.te)) : "—");
+  document.getElementById("m-texto").innerHTML = TEXTOS_M[paso];
+  document.getElementById("m-sig").disabled = paso >= 4;
+}
+LM.alDibujar = mDibujar;
+document.getElementById("m-sig").onclick = () => { if (paso < 4) paso++; mDibujar(); };
+document.getElementById("m-reset").onclick = () => { paso = 0; mDibujar(); };
+
+// ------------------------------------------------------------ JUEGA: lotería del split
+const LJ = lienzo("c-j-mapa", 0.85), LH = lienzo("c-j-hist", 0.85); const SJ = { sem: 1, p: 0.2 };
+const PROF_J = 6; let cacheLot = {};
+function loteria(p) { if (cacheLot[p]) return cacheLot[p];
+  const R = []; for (let s = 1; s <= 40; s++) { const Q = partir(100 + s, p); R.push(acc(crecer(Q.tr, 0, PROF_J), Q.te)); }
+  return (cacheLot[p] = R); }
+function jDibujar() {
+  const Q = partir(100 + SJ.sem, SJ.p), T = crecer(Q.tr, 0, PROF_J), a = acc(T, Q.te), L = loteria(SJ.p);
+  mapa(LJ, { te: Q.te, T, apagar: Q.tr });
+  document.getElementById("j-ate").textContent = pct(a, 1);
+  document.getElementById("j-rango").textContent = `${fmt(100 * Math.min(...L), 0)}–${pct(Math.max(...L), 0)}`;
+  document.getElementById("j-etq").textContent = `Partición #${SJ.sem}: ${Q.tr.length} para entrenar, ${Q.te.length} de prueba (resaltados)`;
+  // histograma
+  const H = LH; if (!H.w) return; const g = H.ctx; g.clearRect(0, 0, H.w, H.h); H.margen = { l: 36, r: 10, t: 12, b: 32 }; const m = H.margen;
+  const lo = 0.55, hi = 0.95, nb = 16, anchoB = (hi - lo) / nb, cuentas = new Array(nb).fill(0);
+  L.forEach((v) => { const k = Math.min(nb - 1, Math.max(0, Math.floor((v - lo) / anchoB))); cuentas[k]++; });
+  const sx = escala(lo, hi, m.l, H.w - m.r), sy = escala(0, Math.max(6, Math.max(...cuentas)), H.h - m.b, m.t);
+  ejes(H, sx, sy, { xt: [0.6, 0.7, 0.8, 0.9], fx: (v) => pct(v), xl: "accuracy en prueba", yl: "particiones" });
+  cuentas.forEach((c, k) => { if (!c) return; g.fillStyle = "rgba(76,141,219,.55)"; const x0 = sx(lo + k * anchoB), x1 = sx(lo + (k + 1) * anchoB);
+    g.fillRect(x0 + 1, sy(c), x1 - x0 - 2, sy(0) - sy(c)); });
+  g.strokeStyle = "#E8C547"; g.lineWidth = 2.5; g.beginPath(); g.moveTo(sx(a), m.t); g.lineTo(sx(a), H.h - m.b); g.stroke();
+  g.fillStyle = "#E8C547"; g.font = "12px Inter, system-ui"; g.textAlign = a > 0.8 ? "right" : "left"; g.fillText("esta partición", sx(a) + (a > 0.8 ? -6 : 6), m.t + 12);
+}
+LJ.alDibujar = LH.alDibujar = jDibujar;
+document.getElementById("j-p").oninput = (e) => { SJ.p = +e.target.value / 100; document.getElementById("j-p-o").textContent = e.target.value + " %"; jDibujar(); };
+document.getElementById("j-otra").onclick = () => { SJ.sem = (SJ.sem % 40) + 1; jDibujar(); };
+
+// ------------------------------------------------------------ RETO: la fuga (target encoding con todos los datos)
+const LB = lienzo("c-r-barras", 0.85), LE = lienzo("c-r-esq", 0.85); const SR = { visto: false, elegido: null };
+const PR = partir(7, 0.2);
+function codificar(P, base, defecto) { // base: filas con las que se calcula el % de graves por dirección
+  const suma = new Map(), cnt = new Map(); base.forEach((p) => { suma.set(p.d, (suma.get(p.d) || 0) + p.y); cnt.set(p.d, (cnt.get(p.d) || 0) + 1); });
+  return P.map((p) => ({ ...p, x: [p.x[0], p.x[1], cnt.has(p.d) ? suma.get(p.d) / cnt.get(p.d) : defecto] })); }
+const media = TODOS.reduce((s, p) => s + p.y, 0) / N;
+const T_SIN = crecer(PR.tr, 0, 4, 2), A_SIN = acc(T_SIN, PR.te);
+const TR_FUGA = codificar(PR.tr, TODOS, media), TE_FUGA = codificar(PR.te, TODOS, media);         // trampa: se calcula con TODOS (incluida la prueba)
+const T_FUGA = crecer(TR_FUGA, 0, 4, 3), A_FUGA_TR = acc(T_FUGA, TR_FUGA), A_FUGA = acc(T_FUGA, TE_FUGA);
+const TR_OK = codificar(PR.tr, PR.tr, media), TE_OK = codificar(PR.te, PR.tr, media);            // honesto: solo con entrenamiento
+const T_OK = crecer(TR_OK, 0, 4, 3), A_OK = acc(T_OK, TE_OK);
+document.getElementById("r-base").textContent = pct(A_SIN);
+function rDibujar() {
+  if (!LB.w) return; const { ctx } = LB; ctx.clearRect(0, 0, LB.w, LB.h); LB.margen = { l: 36, r: 10, t: 12, b: 60 }; const m = LB.margen;
+  const filas = [["hora + velocidad", A_SIN, COL.m1], ["+ mágica (todos los datos)", A_FUGA, COL.rojo], ["+ mágica (solo entrenamiento)", A_OK, COL.m2]];
+  const sx = escala(-0.5, 2.5, m.l, LB.w - m.r), sy = escala(0.5, 1.0, LB.h - m.b, m.t);
+  ejes(LB, sx, sy, { yt: [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], fy: (v) => pct(v) });
+  filas.forEach(([nombre, a, c], i) => { const mostrar = SR.visto || i === 0; const x0 = sx(i - 0.32), x1 = sx(i + 0.32);
+    ctx.fillStyle = mostrar ? c : "rgba(255,255,255,.08)"; ctx.fillRect(x0, sy(mostrar ? a : 0.5), x1 - x0, sy(0.5) - sy(mostrar ? a : 0.5));
+    ctx.fillStyle = COL.texto; ctx.font = "bold 13px Inter, system-ui"; ctx.textAlign = "center"; if (mostrar) ctx.fillText(pct(a), (x0 + x1) / 2, sy(a) - 6);
+    ctx.fillStyle = COL.suave; ctx.font = "11.5px Inter, system-ui"; nombre.split(" (").forEach((t, k) => ctx.fillText(k ? "(" + t : t, (x0 + x1) / 2, LB.h - m.b + 16 + 14 * k)); });
+  // esquema: cómo se fabricó la mágica
+  const E = LE, g = E.ctx; if (!E.w) return; g.clearRect(0, 0, E.w, E.h); g.font = "13px Inter, system-ui"; g.textAlign = "left";
+  const fila = (y, texto, c = COL.suave) => { g.fillStyle = c; g.fillText(texto, 14, y); };
+  fila(26, "Dirección «Cra 7 # 12»:", COL.texto);
+  fila(50, "• incidente A (entrenamiento) → grave");
+  fila(70, "• incidente B (PRUEBA)        → leve");
+  fila(100, "mágica = graves ÷ incidentes = 1 ÷ 2 = 0,50", COL.texto);
+  if (SR.visto) { fila(134, "El valor 0,50 de B ya «sabe» que B fue leve:", COL.rojo); fila(154, "la respuesta se coló en una variable de entrada.", COL.rojo);
+    fila(188, "Honesto: calcular solo con entrenamiento;", COL.m2); fila(208, "B no aparece → usa el promedio general.", COL.m2); }
+  else { fila(134, "Con 600 incidentes y ~480 direcciones, casi", COL.tenue); fila(154, "cada dirección tiene 1 solo incidente…", COL.tenue); }
+}
+LB.alDibujar = LE.alDibujar = rDibujar;
+opciones("r-ops", (v) => { SR.elegido = v; document.getElementById("r-ver").disabled = false; });
+document.getElementById("r-ver").onclick = () => {
+  SR.visto = true; const r = document.getElementById("r-resp"), bien = SR.elegido === "mucho";
+  r.innerHTML = (bien ? '<span class="ok">Exacto, y ese es el problema.</span> ' : '<span class="no">Sorpresa:</span> ') +
+    `con la variable mágica el árbol acierta <b>${pct(A_FUGA)}</b> en prueba (y ${pct(A_FUGA_TR)} en entrenamiento). Parece un modelo buenísimo, pero es <b>fuga de información</b> (<i>data leakage</i>): ` +
+    "el % de graves de cada dirección se calculó <b>incluyendo la fila de prueba</b>, así que la variable lleva escondida la respuesta. " +
+    `Calculada <b>solo con entrenamiento</b>, la misma variable da <b>${pct(A_OK)}</b>: no ayuda y hasta estorba, porque en entrenamiento es casi la respuesta de cada fila (direcciones de un solo incidente) y el árbol la prefiere a la hora y la velocidad; en prueba, las direcciones son nuevas y la variable no dice nada. ` +
+    "Regla: todo lo que se calcule a partir de los datos (promedios por grupo, escalado, imputación) se aprende con entrenamiento y se <b>aplica</b> a la prueba.";
+  r.classList.add("visible"); rDibujar(); };
+
+pestanas(() => [LM, LJ, LH, LB, LE].forEach((L) => L.ajustar()));
+mDibujar(); jDibujar(); rDibujar();
+</script>
+</body>
+</html>
