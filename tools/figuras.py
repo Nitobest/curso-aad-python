@@ -2064,10 +2064,11 @@ def gini_pelotas(casos=((10, 0), (8, 2), (5, 5))):
         _caja_pelotas(ax, x, 6.6, 10, 7.6, nr, na, titulo=f"{nr} con víctimas · {na} solo daños")
         ax.text(x + 5, 5.75, f"p(rojo) = {nr}/{n} = {p1:.1f}".replace(".", ","), ha="center", fontsize=10.5, color=ROJO)
         ax.text(x + 5, 4.95, f"p(azul) = {na}/{n} = {p0:.1f}".replace(".", ","), ha="center", fontsize=10.5, color=AZUL)
-        ax.text(x + 5, 3.85, f"G = 1 − {p1:.1f}² − {p0:.1f}²  =  1 − {p1**2:.2f} − {p0**2:.2f}".replace(".", ","), ha="center", fontsize=11.5, color=NEGRO)
+        ax.text(x + 5, 3.95, f"G = 1 − {p1:.1f}² − {p0:.1f}²".replace(".", ","), ha="center", fontsize=11.5, color=NEGRO)
+        ax.text(x + 5, 3.05, f"= 1 − {p1**2:.2f} − {p0**2:.2f}".replace(".", ","), ha="center", fontsize=11.5, color=NEGRO)
         col = AZUL if g < 0.1 else (ROJO if g >= 0.45 else "#D97C1F")
-        ax.text(x + 5, 1.75, f"G = {g:.2f}".replace(".", ","), ha="center", fontsize=19, fontweight="bold", color=col)
-        ax.text(x + 5, 0.55, etiquetas[k] if k < 3 else "", ha="center", fontsize=10, color=GRIS, style="italic")
+        ax.text(x + 5, 1.55, f"G = {g:.2f}".replace(".", ","), ha="center", fontsize=19, fontweight="bold", color=col)
+        ax.text(x + 5, 0.45, etiquetas[k] if k < 3 else "", ha="center", fontsize=10, color=GRIS, style="italic")
     ax.set_title("Impureza de Gini: qué tan revuelta está una caja", fontsize=13)
     return _leyenda(fig, "G = 0 cuando todas las pelotas son del mismo color (caja pura); con dos colores, el máximo es "
                          "0,5 (mitad y mitad). El árbol busca preguntas que dejen cajas con G bajo.")
@@ -2114,8 +2115,9 @@ def arbol_mini_datos():
     gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.25, 1.35], wspace=0.35)
     axt = fig.add_subplot(gs[0]); axt.axis("off")
     filas = [[f"{h} h", f"{v} km/h", "sí" if c else "no"] for h, v, c in zip(hora, vel, y)]
-    t = axt.table(cellText=filas, colLabels=["hora", "velocidad", "¿víctimas?"], loc="center", cellLoc="center")
-    t.auto_set_font_size(False); t.set_fontsize(10.5); t.scale(1, 1.45)
+    t = axt.table(cellText=filas, colLabels=["hora", "velocidad", "víctimas"], loc="center", cellLoc="center",
+                  colWidths=[0.28, 0.42, 0.34])
+    t.auto_set_font_size(False); t.set_fontsize(10); t.scale(1.15, 1.45)
     for (i, j), c in t.get_celld().items():
         c.set_edgecolor("#DDDDDD")
         if i == 0: c.set_facecolor("#F0F0F0"); c.set_text_props(fontweight="bold")
@@ -2233,44 +2235,48 @@ def arbol_recorrido(fila=(3, 80)):
     X, y = _datos_sinteticos(300)
     m = DecisionTreeClassifier(max_depth=2, min_samples_leaf=15, random_state=0).fit(X, y)
     t = m.tree_; val = t.value[:, 0, :] / t.value[:, 0, :].sum(axis=1, keepdims=True)
-    fig = plt.figure(figsize=(14, 5.8)); gs = fig.add_gridspec(1, 2, width_ratios=[1.25, 1], wspace=0.08)
-    ax = fig.add_subplot(gs[0]); ax.axis("off"); ax.set_xlim(-0.6, 3.6); ax.set_ylim(-2.75, 0.6)
+    fig = plt.figure(figsize=(15, 6.4)); gs = fig.add_gridspec(1, 2, width_ratios=[1.45, 1], wspace=0.12)
+    ax = fig.add_subplot(gs[0]); ax.axis("off")
+    SEP = 1.3                                            # separación horizontal entre hojas
     pos, cont = {}, [0]
     def _ub(n, d):
         if t.children_left[n] == -1:
-            pos[n] = (cont[0], -d); cont[0] += 1; return cont[0] - 1
+            pos[n] = (cont[0] * SEP, -d * 1.15); cont[0] += 1; return pos[n][0]
         a, b = _ub(t.children_left[n], d + 1), _ub(t.children_right[n], d + 1)
-        pos[n] = ((a + b) / 2, -d); return pos[n][0]
-    _ub(0, 0); ax.set_xlim(-0.6, cont[0] - 0.4)
+        pos[n] = ((a + b) / 2, -d * 1.15); return pos[n][0]
+    _ub(0, 0)
+    ax.set_xlim(-0.65, (cont[0] - 1) * SEP + 0.65); ax.set_ylim(-2.3 - 0.55, 0.55)
     f = np.array(fila, dtype=float); camino = [0]; nodo = 0
     while t.children_left[nodo] != -1:
         nodo = t.children_left[nodo] if f[t.feature[nodo]] <= t.threshold[nodo] else t.children_right[nodo]; camino.append(nodo)
     nombres = ["hora", "velocidad"]; unid = [" h", " km/h"]
     hojas = [n for n in range(t.node_count) if t.children_left[n] == -1]
     num = {h: i + 1 for i, h in enumerate(hojas)}
-    W, H = 0.9, 0.5
+    W, H = 1.18, 0.86
     for n in range(t.node_count):
         x, yv = pos[n]; p1 = val[n, 1]; hoja = t.children_left[n] == -1; enc = n in camino
-        ax.add_patch(FancyBboxPatch((x - W / 2, yv - H / 2), W, H, boxstyle="round,pad=0,rounding_size=0.06",
+        ax.add_patch(FancyBboxPatch((x - W / 2, yv - H / 2), W, H, boxstyle="round,pad=0,rounding_size=0.07",
                                     fc=("#FBECEA" if p1 >= .5 else "#E9F0F9") if hoja else "white",
-                                    ec="#E8B500" if enc else "#BBBBBB", lw=3 if enc else 1.3, zorder=2))
+                                    ec="#E8B500" if enc else "#BBBBBB", lw=3.2 if enc else 1.3, zorder=2))
         if hoja:
-            ax.text(x, yv + 0.1, f"hoja {num[n]}: {'con víctimas' if p1 >= .5 else 'solo daños'}", ha="center",
-                    fontsize=9.6, fontweight="bold", color=ROJO if p1 >= .5 else AZUL, zorder=3)
+            ax.text(x, yv + 0.3, f"hoja {num[n]}", ha="center", va="center", fontsize=10, color="#555555", zorder=3)
+            ax.text(x, yv + 0.13, "con víctimas" if p1 >= .5 else "solo daños", ha="center", va="center",
+                    fontsize=11.5, fontweight="bold", color=ROJO if p1 >= .5 else AZUL, zorder=3)
         else:
-            ax.text(x, yv + 0.1, f"¿{nombres[t.feature[n]]} ≤ {t.threshold[n]:.0f}{unid[t.feature[n]]}?", ha="center",
-                    fontsize=11.5, fontweight="bold", color=NEGRO, zorder=3)
+            ax.text(x, yv + 0.18, f"¿{nombres[t.feature[n]]} ≤ {t.threshold[n]:.0f}{unid[t.feature[n]]}?", ha="center",
+                    va="center", fontsize=12, fontweight="bold", color=NEGRO, zorder=3)
             for hijo, etq in ((t.children_left[n], "sí"), (t.children_right[n], "no")):
                 hx, hy = pos[hijo]; on = enc and hijo in camino
                 ax.annotate("", xy=(hx, hy + H / 2), xytext=(x, yv - H / 2),
-                            arrowprops=dict(arrowstyle="-|>", color="#E8B500" if on else "#999999", lw=2.6 if on else 1.3))
-                ax.text((x + hx) / 2, (yv + hy) / 2, etq, ha="center", va="center", fontsize=10, fontweight="bold",
-                        color=AZUL if etq == "sí" else GRIS, bbox=dict(boxstyle="round,pad=.2", fc="white", ec="none"))
-        bx = x - W / 2 + .07; bw = W - .14
-        ax.add_patch(plt.Rectangle((bx, yv - .16), bw * (1 - p1), .07, color=AZUL, zorder=3))
-        ax.add_patch(plt.Rectangle((bx + bw * (1 - p1), yv - .16), bw * p1, .07, color=ROJO, zorder=3))
-        ax.text(x, yv - .045, f"{t.n_node_samples[n]} casos · {p1:.0%} graves", ha="center", fontsize=8.6, color="#555555", zorder=3)
-    ax.set_title("Como diagrama de flujo", fontsize=12.5)
+                            arrowprops=dict(arrowstyle="-|>", color="#E8B500" if on else "#999999", lw=2.8 if on else 1.3))
+                ax.text((x + hx) / 2, (yv - H / 2 + hy + H / 2) / 2, etq, ha="center", va="center", fontsize=11, fontweight="bold",
+                        color=AZUL if etq == "sí" else GRIS, bbox=dict(boxstyle="round,pad=.25", fc="white", ec="none"), zorder=3)
+        ax.text(x, yv - 0.04, f"{t.n_node_samples[n]} casos", ha="center", va="center", fontsize=9.5, color="#555555", zorder=3)
+        ax.text(x, yv - 0.32, f"{p1:.0%} con víctimas".replace("%", " %"), ha="center", va="center", fontsize=9, color=ROJO, zorder=3)
+        bx = x - W / 2 + .1; bw = W - .2
+        ax.add_patch(plt.Rectangle((bx, yv - .2), bw * (1 - p1), .08, color=AZUL, zorder=3))
+        ax.add_patch(plt.Rectangle((bx + bw * (1 - p1), yv - .2), bw * p1, .08, color=ROJO, zorder=3))
+    ax.set_title("Como diagrama de flujo", fontsize=13)
     # mapa
     axm = fig.add_subplot(gs[1])
     xx, yy = np.meshgrid(np.linspace(0, 24, 300), np.linspace(20, 100, 300))
@@ -2294,7 +2300,7 @@ def arbol_recorrido(fila=(3, 80)):
             cortes(t.children_left[n], x0, x1, y0, t.threshold[n]); cortes(t.children_right[n], x0, x1, t.threshold[n], y1)
     cortes(0, 0, 24, 20, 100)
     axm.scatter(*fila, s=260, marker="*", color="#E8B500", edgecolor=NEGRO, lw=1, zorder=5)
-    axm.annotate(f"nuevo: {fila[0]} h, {fila[1]} km/h", xy=fila, xytext=(fila[0] + 4.5, fila[1] - 6.5), fontsize=10,
+    axm.annotate(f"nuevo: {fila[0]} h, {fila[1]} km/h", xy=fila, xytext=(fila[0] + 3, fila[1] - 7), fontsize=10, bbox=dict(boxstyle="round,pad=.2", fc="white", ec="none", alpha=.85),
                  arrowprops=dict(arrowstyle="->", color=NEGRO))
     axm.set_xlim(0, 24); axm.set_ylim(20, 100); axm.set_xlabel("hora"); axm.set_ylabel("velocidad (km/h)")
     axm.set_title("Como mapa de rectángulos", fontsize=12.5)
