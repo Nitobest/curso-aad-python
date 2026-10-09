@@ -6,7 +6,7 @@
 <title>Descenso de gradiente · Laboratorio</title>
 <link rel="stylesheet" href="lab.css">
 <style>:root { --acento: var(--m2); } .vista.activa { grid-template-columns: minmax(0, 1fr) 300px; }
-@media (max-width: 860px) { .vista.activa { grid-template-columns: 1fr; } }</style>
+@media (max-width: 860px) { .vista.activa { grid-template-columns: minmax(0, 1fr); } }</style>
 </head>
 <body>
 <div class="envoltura">
@@ -81,7 +81,7 @@
       <div><div class="etiqueta-lienzo">El camino en el tazón</div><canvas id="c-r-tazon"></canvas></div>
     </div></div>
     <aside class="panel">
-      <h3>Predice antes de correr</h3>
+      <h3>Prediga antes de correr</h3>
       <div class="reto">
         <p class="pregunta">Con η = 0,24 la bolita llega al fondo en zigzag. Si subimos un poquito, a <b>η = 0,28</b>, ¿qué pasa?</p>
         <div class="opciones" id="r-ops">
@@ -183,16 +183,16 @@ document.getElementById("m-reset").onclick = () => { mParar(); SM.P = [INICIO.sl
 
 // ------------------------------------------------------------ JUEGA
 const JD = lienzo("c-j-datos", 0.85), JT = lienzo("c-j-tazon", 0.85);
-const SJ = { ini: INICIO.slice(), P: [INICIO.slice()], anim: null };
+const SJ = { ini: INICIO.slice(), P: [INICIO.slice()], anim: null, etaFija: null };   // etaFija: valor exacto de un botón
 const etaDeSlider = (v) => 0.005 * Math.pow(0.30 / 0.005, v / 100), sliderDeEta = (e) => Math.round(100 * Math.log(e / 0.005) / Math.log(0.30 / 0.005));
-const eta = () => etaDeSlider(+document.getElementById("j-eta").value);
+const eta = () => (SJ.etaFija !== null ? SJ.etaFija : etaDeSlider(+document.getElementById("j-eta").value));
 function jDibujar() { const [b0, b1] = SJ.P[SJ.P.length - 1]; dibujarDatos(JD, b0, b1); dibujarTazon(JT, SJ.P);
   const e = mse(b0, b1); document.getElementById("j-n").textContent = SJ.P.length - 1;
   document.getElementById("j-mse").textContent = isFinite(e) && e < 1e6 ? fmt(e, 3) : "∞";
   document.getElementById("j-eta-o").textContent = fmt(eta(), 3);
   const h = eta(), m = document.getElementById("j-mirar");
   m.innerHTML = "<b>Qué mirar:</b> " + (h < 0.03 ? "con η muy pequeña los pasos son tímidos: llega, pero tarda cientos de pasos."
-    : h < 0.18 ? "un η razonable: baja directo y sin rebotar."
+    : h < 1 / LMAX ? "un η razonable: baja directo y sin rebotar."
     : h < ETA_CRIT ? "el paso es tan largo que la bolita cruza el valle y rebota de lado a lado (zigzag). Todavía llega."
     : `por encima de η ≈ ${fmt(ETA_CRIT, 3)} cada rebote es más alto que el anterior: <b>diverge</b>. El error crece sin límite.`); }
 JD.alDibujar = JT.alDibujar = jDibujar;
@@ -204,8 +204,8 @@ document.getElementById("j-play").onclick = () => { if (SJ.anim) return jStop();
   document.getElementById("j-play").textContent = "⏸ Pausa"; SJ.anim = setInterval(jPaso, 60); };
 document.getElementById("j-paso").onclick = () => { jStop(); jPaso(); };
 document.getElementById("j-reset").onclick = jReset;
-document.getElementById("j-eta").oninput = () => { [...document.querySelectorAll("#j-presets button")].forEach((b) => b.setAttribute("aria-pressed", false)); jReset(); };
-opciones("j-presets", (v) => { document.getElementById("j-eta").value = sliderDeEta(+v); jReset(); });
+document.getElementById("j-eta").oninput = () => { SJ.etaFija = null; [...document.querySelectorAll("#j-presets button")].forEach((b) => b.setAttribute("aria-pressed", false)); jReset(); };
+opciones("j-presets", (v) => { SJ.etaFija = +v; document.getElementById("j-eta").value = sliderDeEta(+v); jReset(); });
 JT.c.addEventListener("pointerdown", (e) => { const p = puntero(JT, e); if (!JT.sx) return;
   SJ.ini = [JT.sx.inv(p.x), JT.sy.inv(p.y)]; jReset(); });
 
@@ -234,7 +234,7 @@ document.getElementById("r-correr").onclick = () => { SR.corrido = true; rDibuja
   r.classList.add("visible"); };
 
 pestanas(() => [MD, MT, JD, JT, RC, RT].forEach((L) => L.ajustar()));
-mDibujar(); document.getElementById("j-eta").value = sliderDeEta(0.1); jReset(); rDibujar();
+mDibujar(); document.getElementById("j-eta").value = sliderDeEta(0.1); SJ.etaFija = 0.1; jReset(); rDibujar();
 </script>
 </body>
 </html>

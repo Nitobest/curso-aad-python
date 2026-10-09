@@ -1,7 +1,7 @@
 /* Laboratorio del curso — estilo "Noche de datos" (mismo de las diapositivas). */
 :root {
   --fondo: #0D1424; --panel: #151E33; --panel2: #1C2742; --borde: #2A3655;
-  --texto: #E8EDF6; --suave: #A9B5CC; --tenue: #6F7C96;
+  --texto: #E8EDF6; --suave: #A9B5CC; --tenue: #8A97B0;
   --m1: #4C8DDB; --m2: #3BB27A; --m3: #F0953A; --m4: #9B6FD9;
   --azul: #4C8DDB; --rojo: #E0645A; --acento: var(--m1);
   --radio: 14px;
@@ -28,7 +28,7 @@ nav.pestanas button .n { color: var(--tenue); font-weight: 600; margin-right: 6p
 
 .vista { display: none; }
 .vista.activa { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
-@media (max-width: 860px) { .vista.activa { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .vista.activa { grid-template-columns: minmax(0, 1fr); } }
 
 .lienzo { align-self: start; background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); padding: 10px; position: relative; }
 .lienzo canvas { width: 100%; display: block; border-radius: 8px; touch-action: none; }
@@ -37,7 +37,7 @@ nav.pestanas button .n { color: var(--tenue); font-weight: 600; margin-right: 6p
 .etiqueta-lienzo { font-size: 12px; color: var(--tenue); margin: 2px 4px 6px; font-weight: 600; letter-spacing: .04em; }
 
 aside.panel { background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); padding: 16px;
-  display: flex; flex-direction: column; gap: 14px; align-self: start; }
+  display: flex; flex-direction: column; gap: 14px; align-self: start; min-width: 0; }
 .panel h3 { margin: 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--tenue); }
 .panel p { margin: 0; color: var(--suave); font-size: 14.5px; }
 .panel p b, .panel p strong { color: var(--texto); }

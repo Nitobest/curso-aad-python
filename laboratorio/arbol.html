@@ -80,7 +80,7 @@
       <div><div class="etiqueta-lienzo" id="r-etq-mapa">Zonas del árbol (puntos = datos de prueba)</div><canvas id="c-r-mapa"></canvas></div>
     </div></div>
     <aside class="panel">
-      <h3>Predice antes de correr</h3>
+      <h3>Prediga antes de correr</h3>
       <div class="reto">
         <p class="pregunta">Entrenamos con 300 incidentes y probamos con <b>otros 300</b> que el árbol nunca vio. ¿Con qué profundidad acierta más en la <b>prueba</b>?</p>
         <div class="control"><label><span>Mi predicción</span> <output id="r-p-o">8</output></label>
@@ -151,7 +151,7 @@ function mapa(L, T, P) {
   return s;
 }
 function reglas(nd, sang = "") {
-  if (!nd.izq) return `${sang}→ ${nd.p >= 0.5 ? "con víctimas" : "solo daños"} (${pct(nd.p)} graves, ${nd.n} casos)\n`;
+  if (!nd.izq) return `${sang}→ ${nd.p >= 0.5 ? "con víctimas" : "solo daños"} (${pct(nd.p)} graves, ${nCasos(nd.n)})\n`;
   const v = NOMBRES[nd.f], t = nd.f === 0 ? fmt(nd.t, 1) + " h" : fmt(nd.t, 0) + " km/h";
   return `${sang}¿${v} ≤ ${t}?\n${sang}  sí: ${reglas(nd.izq, sang + "     ").trimStart()}${sang}  no: ${reglas(nd.der, sang + "     ").trimStart()}`;
 }
@@ -194,7 +194,7 @@ function jDibujar() {
   if (f === 0) { ctx.moveTo(s.sx(t), s.sy(20)); ctx.lineTo(s.sx(t), s.sy(100)); } else { ctx.moveTo(s.sx(0), s.sy(t)); ctx.lineTo(s.sx(24), s.sy(t)); }
   ctx.stroke(); ctx.setLineDash([]);
   ctx.font = "12px Inter, system-ui"; ctx.fillStyle = COL.texto; ctx.textAlign = "left";
-  const corto = LJ.w < 560, etI = corto ? `≤ ${pct(pI)} graves` : `≤: ${izq.length} casos, ${pct(pI)} graves`, etD = corto ? `> ${pct(pD)} graves` : `>: ${der.length} casos, ${pct(pD)} graves`;
+  const corto = LJ.w < 560, etI = corto ? `≤ ${pct(pI)} graves` : `≤: ${nCasos(izq.length)}, ${pct(pI)} graves`, etD = corto ? `> ${pct(pD)} graves` : `>: ${nCasos(der.length)}, ${pct(pD)} graves`;
   if (f === 0) { ctx.fillText(etI, s.sx(0) + 6, s.sy(100) + 14); ctx.textAlign = "right"; ctx.fillText(etD, s.sx(24) - 6, s.sy(100) + 14); }
   else { ctx.fillText(etD, s.sx(0) + 6, s.sy(100) + 14); ctx.fillText(etI, s.sx(0) + 6, s.sy(20) - 8); }
   const gI = gini(izq.reduce((a, p) => a + p.y, 0), izq.length), gD = gini(der.reduce((a, p) => a + p.y, 0), der.length), gP = (izq.length * gI + der.length * gD) / TR.length;
@@ -209,8 +209,10 @@ function jDibujar() {
   punto(g, gx(t), gy(Math.min(.5, gP)), 5, "#FFFFFF", COL.m1);
 }
 LJ.alDibujar = LG.alDibujar = jDibujar;
-opciones("j-var", (v) => { SJ.f = +v; SJ.t = (RANGOS[SJ.f][0] + RANGOS[SJ.f][1]) / 2; document.getElementById("j-t").value = 500; jDibujar(); });
-document.getElementById("j-t").oninput = (e) => { SJ.t = deSlider(+e.target.value); jDibujar(); };
+const MIRAR_J = document.getElementById("j-mirar").innerHTML;
+const jMirarBase = () => { document.getElementById("j-mirar").innerHTML = MIRAR_J; };
+opciones("j-var", (v) => { jMirarBase(); SJ.f = +v; SJ.t = (RANGOS[SJ.f][0] + RANGOS[SJ.f][1]) / 2; document.getElementById("j-t").value = 500; jDibujar(); });
+document.getElementById("j-t").oninput = (e) => { jMirarBase(); SJ.t = deSlider(+e.target.value); jDibujar(); };
 document.getElementById("j-mejor").onclick = () => {
   const b = mejorCorte(TR); SJ.f = b.f; SJ.t = b.t;
   [...document.querySelectorAll("#j-var button")].forEach((x) => x.setAttribute("aria-pressed", +x.dataset.v === b.f));
@@ -221,7 +223,7 @@ document.getElementById("j-mejor").onclick = () => {
 function arrastrar(e) { const p = puntero(LJ, e), s = marcoMapa(LJ);
   SJ.t = Math.max(RANGOS[SJ.f][0], Math.min(RANGOS[SJ.f][1], SJ.f === 0 ? s.sx.inv(p.x) : s.sy.inv(p.y)));
   document.getElementById("j-t").value = aSlider(SJ.t); jDibujar(); }
-LJ.c.addEventListener("pointerdown", (e) => { SJ.arrastrando = true; LJ.c.setPointerCapture(e.pointerId); arrastrar(e); });
+LJ.c.addEventListener("pointerdown", (e) => { jMirarBase(); SJ.arrastrando = true; LJ.c.setPointerCapture(e.pointerId); arrastrar(e); });
 LJ.c.addEventListener("pointermove", (e) => { if (SJ.arrastrando) arrastrar(e); });
 LJ.c.addEventListener("pointerup", () => (SJ.arrastrando = false));
 
@@ -250,7 +252,7 @@ document.getElementById("r-ver").onclick = () => {
   document.getElementById("r-d").value = g; document.getElementById("r-d-o").textContent = g; document.getElementById("r-ctrl").style.display = "block";
   const a14 = ACC[ACC.length - 1], r = document.getElementById("r-resp");
   r.innerHTML = (Math.abs(g - MEJOR.d) <= 1 ? '<span class="ok">¡Bien visto!</span> ' : '<span class="no">Sorpresa:</span> ') +
-    `la prueba es mejor con profundidad <b>${MEJOR.d}</b> (${pct(MEJOR.te)}). Con profundidad 14 el árbol acierta el <b>${pct(a14.tr)}</b> de los datos con que entrenó… y solo el <b>${pct(a14.te)}</b> de los nuevos. ` +
+    `La prueba es mejor con profundidad <b>${MEJOR.d}</b> (${pct(MEJOR.te)}). Con profundidad 14 el árbol acierta el <b>${pct(a14.tr)}</b> de los datos con que entrenó… y solo el <b>${pct(a14.te)}</b> de los nuevos. ` +
     "Eso es <b>sobreajuste</b>: memorizó el ruido. Mueva la profundidad y mire cómo las zonas se llenan de rectángulos diminutos alrededor de puntos sueltos.";
   r.classList.add("visible"); rDibujar(); };
 document.getElementById("r-d").oninput = (e) => { SR.d = +e.target.value; document.getElementById("r-d-o").textContent = SR.d; rDibujar(); };

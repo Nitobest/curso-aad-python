@@ -28,7 +28,7 @@ function lienzo(id, aspecto = 0.68) {
 
 // Escala lineal y ejes sencillos.
 function escala(d0, d1, r0, r1) { const f = (v) => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = (p) => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f; }
-const COL = { texto: "#E8EDF6", suave: "#A9B5CC", tenue: "#6F7C96", rejilla: "rgba(255,255,255,.06)", eje: "rgba(255,255,255,.22)",
+const COL = { texto: "#E8EDF6", suave: "#A9B5CC", tenue: "#8A97B0", rejilla: "rgba(255,255,255,.06)", eje: "rgba(255,255,255,.22)",
   m1: "#4C8DDB", m2: "#3BB27A", m3: "#F0953A", m4: "#9B6FD9", azul: "#4C8DDB", rojo: "#E0645A",
   grupos: ["#4C8DDB", "#F0953A", "#3BB27A", "#9B6FD9", "#E0645A", "#E8C547", "#4FC3C9", "#D96FB0"] };
 
@@ -49,8 +49,10 @@ function punto(ctx, x, y, r, relleno, borde) {
   if (borde) { ctx.strokeStyle = borde; ctx.lineWidth = 1.5; ctx.stroke(); }
 }
 function rango(a, b, paso) { const r = []; for (let v = a; v <= b + 1e-9; v += paso) r.push(+v.toFixed(6)); return r; }
-const fmt = (v, d = 2) => Number(v).toLocaleString("es-CO", { minimumFractionDigits: d, maximumFractionDigits: d });
+// Formato del curso: coma decimal y espacio (no separable) de miles: 20 000; 0,85.
+const fmt = (v, d = 2) => Number(v).toLocaleString("es-CO", { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/\./g, "\u00A0");
 const pct = (v, d = 0) => fmt(100 * v, d) + " %";
+const nCasos = (n) => fmt(n, 0) + (n === 1 ? " caso" : " casos");
 
 // Pestañas Mira / Juega / Reto; recuerda la última (si el navegador lo permite).
 function pestanas(alCambiar) {

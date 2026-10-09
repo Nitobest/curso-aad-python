@@ -55,7 +55,7 @@
         <div class="cifra"><div class="v" id="j-ate">—</div><div class="e">acc. prueba</div></div>
       </div>
       <canvas id="c-j-curva"></canvas>
-      <p class="mirar"><b>Qué mirar:</b> con <b>k = 1</b> la frontera es un rompecabezas que rodea cada punto: acierta el 100 % en entrenamiento (¡cada punto es su propio vecino!) y menos en prueba. Con <b>k enorme</b> todo el mapa se vuelve del color mayoritario. El k bueno está en el medio, y se elige mirando la prueba, no el entrenamiento.</p>
+      <p class="mirar"><b>Qué mirar:</b> con <b>k = 1</b> la frontera es un rompecabezas que rodea cada punto: acierta el 100 % en entrenamiento (¡cada punto es su propio vecino!) y menos en prueba. Con <b>k enorme</b> la frontera se suaviza hacia el color mayoritario. El k bueno está en el medio, y se elige con <b>validación cruzada</b> (Sesión 10), nunca mirando la prueba.</p>
     </aside>
   </section>
 
@@ -66,9 +66,9 @@
       <div><div class="etiqueta-lienzo" id="r-etq">Escalado: las dos variables de 0 a 1</div><canvas id="c-r-esc"></canvas></div>
     </div></div>
     <aside class="panel">
-      <h3>Predice antes de correr</h3>
+      <h3>Prediga antes de correr</h3>
       <div class="reto">
-        <p class="pregunta">Los mismos datos, pero <b>sin escalar</b>: la edad va de 18 a 70 y el saldo de 0 a 20 000. Llega un cliente de <b>25 años con 8 000</b>. ¿Cómo serán sus 7 vecinos más cercanos?</p>
+        <p class="pregunta">Los mismos datos, pero <b>sin escalar</b>: la edad va de 18 a 70 años y el saldo de 0 a 20&nbsp;000 miles de pesos. Llega un cliente de <b>25 años con un saldo de 8&nbsp;000</b> (miles de pesos). ¿Cómo serán sus 7 vecinos más cercanos?</p>
         <div class="opciones" id="r-ops">
           <button data-v="ambos">Parecidos en edad y en saldo</button>
           <button data-v="saldo">Mismo saldo, edad cualquiera</button>
@@ -103,8 +103,8 @@ function predecir(P, q, k, dist) { const V = vecinos(P, q, k, dist); const si = 
 const acc = (P, Q, k, dist) => Q.reduce((s, q) => s + (predecir(P, q, k, dist).y === q.y), 0) / Q.length;
 
 // ------------------------------------------------------------ mapa escalado
-function marco(L) { L.margen = { l: 44, r: 12, t: 10, b: 36 }; const m = L.margen; return { sx: escala(0, 1, m.l, L.w - m.r), sy: escala(0, 1, L.h - m.b, m.t) }; }
-function base(L, cr) { if (!L.w) return; const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const s = marco(L);
+function marco(L, cr) { L.margen = { l: cr ? 60 : 44, r: 12, t: 10, b: 36 }; const m = L.margen; return { sx: escala(0, 1, m.l, L.w - m.r), sy: escala(0, 1, L.h - m.b, m.t) }; }
+function base(L, cr) { if (!L.w) return; const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const s = marco(L, cr);
   ejes(L, s.sx, s.sy, cr ? { xt: [0, .25, .5, .75, 1], fx: (t) => fmt(EDAD[0] + t * 52, 0), yt: [0, .25, .5, .75, 1], fy: (t) => fmt(t * 20000, 0), xl: "edad (años)", yl: "saldo (miles de pesos)" }
     : { xt: [0, .25, .5, .75, 1], fx: (t) => fmt(t, 2), yt: [0, .25, .5, .75, 1], fy: (t) => fmt(t, 2), xl: "edad (escalada)", yl: "saldo (escalado)" }); return s; }
 function puntos(L, s, P, r = 3.2, borde) { P.forEach((p) => punto(L.ctx, s.sx(p.u), s.sy(p.v), r, p.y ? COL.rojo : COL.azul, borde)); }
@@ -119,7 +119,7 @@ function mDibujar() { const s = base(LM); if (!s) return; const { ctx } = LM; pu
   const R = predecir(TR, SM.q, SM.k, dEsc), rad = R.V[R.V.length - 1].d;
   ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(s.sx(SM.q.u), s.sy(SM.q.v), rad * (s.sx(1) - s.sx(0)), rad * (s.sy(0) - s.sy(1)), 0, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
   marcarVecinos(LM, s, TR, SM.q, R.V);
-  document.getElementById("m-votos").innerHTML = `Votan ${SM.k} vecinos: <b style="color:${COL.rojo}">${R.si} sí</b> · <b style="color:${COL.azul}">${R.no} no</b> → predicción: <b>${R.y ? "suscribe" : "no suscribe"}</b> (p ≈ ${pct(R.si / SM.k)})`;
+  document.getElementById("m-votos").innerHTML = `${SM.k === 1 ? "Vota 1 vecino" : `Votan ${SM.k} vecinos`}: <b style="color:${COL.rojo}">${R.si} sí</b> · <b style="color:${COL.azul}">${R.no} no</b> → predicción: <b>${R.y ? "suscribe" : "no suscribe"}</b> (p ≈ ${pct(R.si / SM.k)})`;
   document.getElementById("m-k-o").textContent = SM.k; }
 LM.alDibujar = mDibujar;
 document.getElementById("m-k").oninput = (e) => { SM.k = +e.target.value; mDibujar(); };
@@ -159,8 +159,8 @@ document.getElementById("r-ver").onclick = () => {
   SR.visto = true; const aC = acc(TR, TE, K, dCrudo), aE = acc(TR, TE, K, dEsc), r = document.getElementById("r-resp");
   const V = vecinos(TR, Q, K, dCrudo).map((v) => crudo(TR[v.i])), edades = V.map((c) => c[0]);
   r.innerHTML = (SR.elegido === "saldo" ? '<span class="ok">Exacto.</span> ' : '<span class="no">Sorpresa:</span> ') +
-    `sin escalar, los 7 vecinos tienen casi el mismo saldo pero edades entre <b>${fmt(Math.min(...edades), 0)}</b> y <b>${fmt(Math.max(...edades), 0)}</b> años. ` +
-    "Una diferencia de 50 años cuenta igual que una de 50 pesos, así que la edad <b>desaparece</b> de la distancia: k-NN clasifica solo por saldo sin que nadie se lo pidiera. " +
+    `Sin escalar, los 7 vecinos tienen casi el mismo saldo pero edades entre <b>${fmt(Math.min(...edades), 0)}</b> y <b>${fmt(Math.max(...edades), 0)}</b> años. ` +
+    "Una diferencia de 50 años cuenta igual que una de 50 mil pesos en el saldo, así que la edad <b>desaparece</b> de la distancia: k-NN clasifica solo por saldo sin que nadie se lo pidiera. " +
     `En prueba acierta el ${pct(aC)}; con las dos variables escaladas a 0–1, el ${pct(aE)}. Todo modelo que mide <b>distancias</b> (k-NN, K-means, PCA) necesita escalar antes; y el escalado se aprende con entrenamiento y se aplica a la prueba (Sesión 3).`;
   r.classList.add("visible"); document.getElementById("r-acrudo").textContent = pct(aC); document.getElementById("r-aesc").textContent = pct(aE); document.getElementById("r-cifras").style.display = ""; rDibujar(); };
 

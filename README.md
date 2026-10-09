@@ -5,6 +5,18 @@
 
 Aquí está el material del curso. No hay que instalar nada: cada notebook se abre en Colab con un clic y descarga solo los datos que necesita.
 
+> Las fechas de cada sesión y de cada entrega se confirman en la primera clase.
+
+---
+
+## Antes de la primera clase
+
+1. **Haga el Notebook 0** (diagnóstico, primera fila de la tabla de sesiones): 20–30 minutos, sin nota. Sirve para que usted y el profesor sepan desde dónde arranca cada quien.
+2. Ábralo con **Open in Colab** y, antes de escribir nada, use **Archivo → Guardar una copia en Drive**. Así lo hará en todas las sesiones.
+3. Si Colab muestra el aviso *"Este notebook no fue creado por Google"*, elija **Ejecutar de todos modos**: es el notebook del curso.
+4. Recuerde que el **certificado exige el 80 % de asistencia** a las sesiones en vivo.
+5. Esté pendiente del **canal del curso** (se indica en la primera clase): por ahí llegan avisos, archivos de respaldo y la forma de entregar.
+
 ---
 
 ## Cómo trabajar cada sesión
@@ -18,13 +30,34 @@ Aquí está el material del curso. No hay que instalar nada: cada notebook se ab
    - ✏️ **Completa** → reemplace los `...` por su código. Si ejecuta todo de una vez, el notebook se detiene ahí hasta que lo complete.
    - ⚡ **Mini-reto** → opcional, para quien termine antes.
 
-> ¿El notebook dice que no pudo bajar los datos? Siga a la celda **Plan B**: le pedirá subir el archivo, que el instructor comparte por el grupo del curso.
+> ¿El notebook dice que no pudo bajar los datos? Siga a la celda **Plan B**: le pedirá subir el archivo, que el profesor comparte por el canal del curso.
 
 ---
 
 ## 🧪 Laboratorio de algoritmos
 
 Cada algoritmo, para tocarlo: **[nitobest.github.io/curso-aad-python/laboratorio](https://nitobest.github.io/curso-aad-python/laboratorio/)**. Mírelo paso a paso, juegue con sus perillas y supere el reto. Funciona también en el celular.
+
+---
+
+## Calendario
+
+Lunes y miércoles, 7:00–9:00 p.m. No hay clase los lunes festivos 12-oct, 2-nov y 16-nov.
+
+| Sesión | Fecha | Módulo | Entrega |
+|---|---|---|---|
+| 1 | mié 14-oct | M1 · Introducción al ML | |
+| 2 | lun 19-oct | M1 | |
+| 3 | mié 21-oct | M1 | se presenta E1 |
+| 4 | lun 26-oct | M2 · Supervisado | E1 (antes de esta sesión) |
+| 5 | mié 28-oct | M2 | |
+| 6 | mié 4-nov | M2 | se presenta E2 |
+| 7 | lun 9-nov | M3 · No supervisado | E2 (antes de esta sesión) |
+| 8 | mié 11-nov | M3 | |
+| 9 | mié 18-nov | M3 | se presenta E3 |
+| 10 | lun 23-nov | M4 · Evaluación y optimización | E3 (antes de esta sesión) |
+| 11 | mié 25-nov | M4 | se presenta E4 |
+| 12 | lun 30-nov | M4 · Cierre | E4 (antes de esta sesión) y presentación |
 
 ---
 
@@ -46,13 +79,13 @@ Cada algoritmo, para tocarlo: **[nitobest.github.io/curso-aad-python/laboratorio
 | 11 | M4 · Evaluación y optimización | Afinar sin hacer trampa: gradient boosting, Optuna, SHAP y el modelo final · **Entrega E4** | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S11/S11_estudiante.ipynb) |
 | 12 | Cierre | Presentaciones del proyecto final y cierre del curso | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S12/S12_estudiante.ipynb) |
 
-Los notebooks se publican a medida que avanza el curso.
+Todos los notebooks ya están publicados, pero pueden recibir ajustes antes de cada clase: abra el enlace de la sesión el mismo día y guarde su copia en Drive en ese momento.
 
 ---
 
 ## Proyecto final
 
-Es el único entregable obligatorio. Usted elige su propio dataset y lo lleva por el mismo pipeline que vemos en clase, en cuatro entregas parciales (E1–E4) y una presentación en la Sesión 12. Detalles y rúbrica: [`proyecto/README.md`](proyecto/README.md).
+Es el único entregable obligatorio. Usted elige su propio dataset y lo lleva por el mismo pipeline que vemos en clase, en cuatro entregas parciales (E1–E4) y una presentación en la Sesión 12. Cada entrega se envía **por el canal que indique el profesor en la primera clase**, antes de la sesión siguiente a la del módulo (E1 antes de la Sesión 4, E2 antes de la 7, E3 antes de la 10, E4 antes de la 12). Detalles, formato y rúbrica: [`proyecto/README.md`](proyecto/README.md).
 
 Para cargar **sus** datos en Colab, súbalos a su Google Drive y use:
 

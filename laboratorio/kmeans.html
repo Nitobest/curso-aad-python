@@ -72,7 +72,7 @@
     <div class="lienzo"><canvas id="c-reto"></canvas>
       <div class="etiqueta-lienzo" id="reto-leyenda">342 pingüinos de 3 especies. K-means no ve la especie: solo las 4 medidas (pico largo, pico alto, aleta, masa).</div></div>
     <aside class="panel">
-      <h3>Predice antes de correr</h3>
+      <h3>Prediga antes de correr</h3>
       <div class="reto">
         <p class="pregunta">K-means con k = 3 sobre las medidas <b>tal como vienen</b> (milímetros y gramos). ¿Qué porcentaje de pingüinos queda en el grupo de su propia especie?</p>
         <div class="control"><label>Mi predicción <output id="reto-p-o">80 %</output></label>
@@ -266,7 +266,9 @@ document.getElementById("reto-crudo").onclick = () => {
   R.Lc = kmeans(PX, 3, 7).L; R.estado = 1; R.ver = "grupo";
   const p = pureza(R.Lc), g = +document.getElementById("reto-p").value, r = document.getElementById("reto-r1");
   r.innerHTML = `Resultado: <b>${pct(p)}</b> de los pingüinos quedó con su especie. Usted dijo ${g} %. ` +
-    (Math.abs(g - 100 * p) <= 8 ? '<span class="ok">¡Muy cerca!</span>' : '<span class="no">La mayoría apuesta más alto.</span>') +
+    (Math.abs(g - 100 * p) <= 8 ? '<span class="ok">¡Muy cerca!</span>'
+      : g > 100 * p ? '<span class="no">Apostó más alto, como casi todos: parecía fácil.</span>'
+      : '<span class="no">Apostó más bajo: sospechaba algo, y tenía razón en desconfiar.</span>') +
     " Mire el dibujo: los grupos son <b>franjas</b> de masa corporal.";
   r.classList.add("visible"); document.getElementById("reto-paso2").style.display = "block";
   document.getElementById("reto-ver").style.display = "flex"; verOpc.elegir("grupo");

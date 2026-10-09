@@ -75,13 +75,13 @@
       <div><div class="etiqueta-lienzo" id="r-etq">Cómo se fabricó la variable "mágica"</div><canvas id="c-r-esq"></canvas></div>
     </div></div>
     <aside class="panel">
-      <h3>Predice antes de correr</h3>
+      <h3>Prediga antes de correr</h3>
       <div class="reto">
         <p class="pregunta">Cada incidente tiene una <b>dirección</b> (casi todas distintas, como en los datos reales). Fabricamos una variable nueva: <i>"% de incidentes graves en esa dirección"</i>, calculada con <b>todos</b> los 600 datos, y se la damos al árbol. Con hora y velocidad el árbol acierta ~<span id="r-base">75 %</span> en prueba. ¿Con la variable nueva?</p>
         <div class="opciones" id="r-ops">
           <button data-v="igual">Más o menos igual</button>
-          <button data-v="poco">Algo mejor (80–85 %)</button>
-          <button data-v="mucho">Casi perfecto (&gt; 90 %)</button>
+          <button data-v="poco">Algo mejor (+3 a +5 puntos)</button>
+          <button data-v="mucho">Mucho mejor (+10 puntos o más)</button>
         </div>
         <div class="botones" style="margin-top:10px"><button class="b primario" id="r-ver" disabled>Entrenar con la variable mágica</button></div>
         <div class="respuesta" id="r-resp"></div>
@@ -215,7 +215,11 @@ function rDibujar() {
   filas.forEach(([nombre, a, c], i) => { const mostrar = SR.visto || i === 0; const x0 = sx(i - 0.32), x1 = sx(i + 0.32);
     ctx.fillStyle = mostrar ? c : "rgba(255,255,255,.08)"; ctx.fillRect(x0, sy(mostrar ? a : 0.5), x1 - x0, sy(0.5) - sy(mostrar ? a : 0.5));
     ctx.fillStyle = COL.texto; ctx.font = "bold 13px Inter, system-ui"; ctx.textAlign = "center"; if (mostrar) ctx.fillText(pct(a), (x0 + x1) / 2, sy(a) - 6);
-    ctx.fillStyle = COL.suave; ctx.font = "11.5px Inter, system-ui"; nombre.split(" (").forEach((t, k) => ctx.fillText(k ? "(" + t : t, (x0 + x1) / 2, LB.h - m.b + 16 + 14 * k)); });
+    ctx.fillStyle = COL.suave; ctx.font = "11.5px Inter, system-ui";
+    const ancho = sx(1) - sx(0) - 6, lineas = [];   // parte la etiqueta en renglones que quepan bajo su barra
+    nombre.split(" ").forEach((w) => { const ult = lineas.length ? lineas[lineas.length - 1] + " " + w : null;
+      if (ult !== null && ctx.measureText(ult).width <= ancho) lineas[lineas.length - 1] = ult; else lineas.push(w); });
+    lineas.forEach((t, k) => ctx.fillText(t, (x0 + x1) / 2, LB.h - m.b + 16 + 14 * k)); });
   // esquema: cómo se fabricó la mágica
   const E = LE, g = E.ctx; if (!E.w) return; g.clearRect(0, 0, E.w, E.h); g.font = "13px Inter, system-ui"; g.textAlign = "left";
   const fila = (y, texto, c = COL.suave) => { g.fillStyle = c; g.fillText(texto, 14, y); };
@@ -232,7 +236,7 @@ opciones("r-ops", (v) => { SR.elegido = v; document.getElementById("r-ver").disa
 document.getElementById("r-ver").onclick = () => {
   SR.visto = true; const r = document.getElementById("r-resp"), bien = SR.elegido === "mucho";
   r.innerHTML = (bien ? '<span class="ok">Exacto, y ese es el problema.</span> ' : '<span class="no">Sorpresa:</span> ') +
-    `con la variable mágica el árbol acierta <b>${pct(A_FUGA)}</b> en prueba (y ${pct(A_FUGA_TR)} en entrenamiento). Parece un modelo buenísimo, pero es <b>fuga de información</b> (<i>data leakage</i>): ` +
+    `Con la variable mágica el árbol acierta <b>${pct(A_FUGA)}</b> en prueba (y ${pct(A_FUGA_TR)} en entrenamiento). Parece un modelo buenísimo, pero es <b>fuga de información</b> (<i>data leakage</i>): ` +
     "el % de graves de cada dirección se calculó <b>incluyendo la fila de prueba</b>, así que la variable lleva escondida la respuesta. " +
     `Calculada <b>solo con entrenamiento</b>, la misma variable da <b>${pct(A_OK)}</b>: no ayuda y hasta estorba, porque en entrenamiento es casi la respuesta de cada fila (direcciones de un solo incidente) y el árbol la prefiere a la hora y la velocidad; en prueba, las direcciones son nuevas y la variable no dice nada. ` +
     "Regla: todo lo que se calcule a partir de los datos (promedios por grupo, escalado, imputación) se aprende con entrenamiento y se <b>aplica</b> a la prueba.";

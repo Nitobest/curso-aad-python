@@ -39,14 +39,94 @@ CMAP_PROB = LinearSegmentedColormap.from_list("prob", [AZUL, "#F2F2F2", ROJO])
 plt.rcParams.update({
     "figure.dpi": 110, "axes.spines.top": False, "axes.spines.right": False,
     "axes.titlesize": 11, "axes.labelsize": 10, "legend.fontsize": 9,
+    # La misma letra en Colab, en el Mac y en las diapos (DejaVu viene con matplotlib).
+    "font.family": "sans-serif", "font.sans-serif": ["DejaVu Sans"],
 })
 
 
-def _leyenda(fig, texto):
-    """Escribe la frase 'qué mirar' debajo de la figura."""
-    fig.text(0.5, -0.01, "Qué mirar: " + texto, ha="center", va="top", fontsize=10,
-             style="italic", color=NEGRO, wrap=True)
+# ------------------------------------------------------------------ números en español
+# Convención del curso: coma decimal (0,894) y espacio de miles (1 157), como en el texto y las diapos.
+import re as _re
+from matplotlib.ticker import ScalarFormatter as _ScalarFormatter
+
+_ESP = " "   # espacio fino que no se parte de línea
+
+
+def _mil(v, dec=0):
+    """1157.3 -> '1 157' (miles con espacio fino, decimales con coma)."""
+    s = f"{v:,.{dec}f}"
+    return s.replace(",", _ESP).replace(".", ",")
+
+
+class _FormatoES(_ScalarFormatter):
+    """Los números de los ejes con coma decimal."""
+    def __call__(self, x, pos=None):
+        return super().__call__(x, pos).replace(".", ",")
+
+    def get_offset(self):
+        return super().get_offset().replace(".", ",")
+
+
+_NUM_DECIMAL = _re.compile(r"(?<![\w.])(\d+)\.(\d+)(?!\d|\.\d)")
+_PORCENTAJE = _re.compile(r"(\d)%")
+
+
+def _texto_es(s):
+    """'accuracy 0.894 (71%)' -> 'accuracy 0,894 (71 %)'. No toca parámetros de código ('max_depth=0.5')
+    ni fórmulas LaTeX ($...$)."""
+    if not s or "$" in s:
+        return s
+
+    def dec(m):
+        if _re.search(r"[A-Za-z_]=\s*$", s[:m.start()]):     # parámetro de código: lr=0.1
+            return m.group(0)
+        return f"{m.group(1)},{m.group(2)}"
+    s = _NUM_DECIMAL.sub(dec, s)
+    return _PORCENTAJE.sub(lambda m: m.group(1) + _ESP + "%", s)
+
+
+def _es_monoespaciado(t):
+    try:
+        return any(f in ("monospace", "DejaVu Sans Mono", "Courier New") for f in t.get_fontfamily())
+    except Exception:
+        return False
+
+
+def _espanol(fig):
+    """Pasa a formato español los números de una figura: ejes, títulos, anotaciones y leyendas."""
+    from matplotlib.text import Text
+    for ax in fig.axes:
+        for eje in (ax.xaxis, ax.yaxis):
+            fmt = eje.get_major_formatter()
+            if type(fmt) is _ScalarFormatter and eje.get_scale() == "linear":
+                eje.set_major_formatter(_FormatoES())
+            elif type(fmt).__name__ in ("FixedFormatter", "FuncFormatter") and not getattr(fmt, "_es", False):
+                # etiquetas puestas a mano (set_xticklabels) o con una función: se traducen al dibujar
+                from matplotlib.ticker import FuncFormatter
+                nuevo = FuncFormatter(lambda x, pos, f=fmt: _texto_es(str(f(x, pos))))
+                nuevo._es = True
+                eje.set_major_formatter(nuevo)
+    for t in fig.findobj(Text):
+        if _es_monoespaciado(t):
+            continue
+        nuevo = _texto_es(t.get_text())
+        if nuevo != t.get_text():
+            t.set_text(nuevo)
     return fig
+
+
+def _es_texto(serie):
+    """True si la columna es texto, con pandas 2 (object) o pandas 3 (str)."""
+    return pd.api.types.is_object_dtype(serie) or pd.api.types.is_string_dtype(serie)
+
+
+def _leyenda(fig, texto):
+    """Escribe la frase 'qué mirar' debajo de la figura (y deja los números en formato español)."""
+    import textwrap
+    ancho = max(60, int(fig.get_figwidth() * 12.5))      # caracteres por línea según el ancho de la figura
+    fig.text(0.5, -0.01, textwrap.fill("Qué mirar: " + texto, ancho), ha="center", va="top", fontsize=10,
+             style="italic", color=NEGRO)
+    return _espanol(fig)
 
 
 # ================================================================== PIPELINE
@@ -72,7 +152,7 @@ def pipeline(etapa_hoy=None, modulo=1, subtitulo=None):
                               fc=color if activo else "white", ec=color if activo else GRIS,
                               lw=2 if activo else 1.2)
         ax.add_patch(caja)
-        ax.text(x + 0.95, 1.0, e, ha="center", va="center", fontsize=9.5,
+        ax.text(x + 0.95, 1.0, e, ha="center", va="center", fontsize=9.5 if len(e) <= 12 else 8.4,
                 color="white" if activo else GRIS, fontweight="bold" if activo else "normal")
         if i < len(ETAPAS) - 1:
             ax.annotate("", xy=(x + 2.2, 1.0), xytext=(x + 1.9, 1.0),
@@ -153,7 +233,7 @@ def arbol_paso_a_paso(profundidades=(1, 2, 3, 4), n=300):
     X, y = _datos_sinteticos(n)
     fig, axes = plt.subplots(1, len(profundidades), figsize=(4 * len(profundidades), 3.8), sharey=True)
     for ax, d in zip(axes, profundidades):
-        m = DecisionTreeClassifier(max_depth=d, random_state=0).fit(X, y)
+        m = DecisionTreeClassifier(max_depth=d, min_samples_leaf=5, random_state=0).fit(X, y)   # sin hojas de 1 punto
         _regiones(ax, m, X, y, titulo=f"profundidad {d}: {'1 pregunta' if d == 1 else f'hasta {d} preguntas'}\n"
                                       f"{m.get_n_leaves()} regiones")
     axes[0].set_ylabel("velocidad")
@@ -180,8 +260,11 @@ def arbol_como_elige_el_corte(n=300):
         mejor = umbrales[ginis.argmin()]
         ax.plot(umbrales, ginis, color=NEGRO, lw=1.5)
         ax.axvline(mejor, color=ROJO, ls="--")
+        # la anotación va a la zona en blanco (abajo, del lado contrario al valle) para no tapar la curva
+        a_la_derecha = mejor < (umbrales.min() + umbrales.max()) / 2
         ax.annotate(f"mejor corte: {col} ≤ {mejor:.1f}\nimpureza {ginis.min():.3f}",
-                    xy=(mejor, ginis.min()), xytext=(10, 25), textcoords="offset points",
+                    xy=(mejor, ginis.min()), xytext=(0.97 if a_la_derecha else 0.03, 0.1), textcoords="axes fraction",
+                    ha="right" if a_la_derecha else "left", va="bottom",
                     fontsize=9, color=ROJO, arrowprops=dict(arrowstyle="->", color=ROJO))
         ax.set_xlabel(f"umbral probado sobre '{col}'"); ax.set_ylabel("impureza (Gini) tras el corte")
         ax.set_title(f"¿Dónde cortar '{col}'?")
@@ -216,11 +299,12 @@ def mapa_hora_dia(datos, profundidad=3, col_hora="hora_num", col_dia="dia_semana
     malla = pd.DataFrame([(h, d) for d in range(7) for h in range(24)], columns=[col_hora, col_dia])
     pred = pd.DataFrame(m.predict_proba(malla)[:, 1].reshape(7, 24))
     fig, axes = plt.subplots(1, 2, figsize=(13, 3.6))
-    _mapa(axes[0], real, "Datos reales: % de incidentes con víctimas")
-    im = _mapa(axes[1], pred, f"Árbol de profundidad {profundidad} (solo hora y día)")
+    _mapa(axes[0], real, "Datos reales: proporción con víctimas")
+    im = _mapa(axes[1], pred, f"Árbol de profundidad {profundidad} (solo hora y día): proporción predicha")
+    n = cajas_hojas(axes[1], m, (-0.5, 23.5), (-0.5, 6.5), columnas=(col_hora, col_dia), lw=1.6, alpha=0.9)
     cb = fig.colorbar(im, ax=axes, fraction=0.02, pad=0.02); cb.set_label("proporción con víctimas")
     return _leyenda(fig, "El mapa real es suave (madrugada y domingo, más víctimas); el árbol lo aproxima con "
-                         "rectángulos: cada rectángulo es una hoja.")
+                         f"rectángulos: cada rectángulo de borde negro es una de sus {n} hojas.")
 
 
 # ================================================================== ÁRBOL — (C) qué pasa cuando cambio la profundidad
@@ -240,7 +324,7 @@ def arbol_profundidades(X_train, y_train, X_test, y_test, profundidades=(1, 2, 4
         m2 = DecisionTreeClassifier(max_depth=d, random_state=42).fit(X_train[[col_hora, col_dia]], y_train)
         ax = fig.add_subplot(gs[0, j])
         _mapa(ax, pd.DataFrame(m2.predict_proba(malla)[:, 1].reshape(7, 24)),
-              f"profundidad {etiquetas[j]}\n{m2.get_n_leaves()} hojas")
+              f"profundidad {etiquetas[j]}\n{_mil(m2.get_n_leaves())} hojas")
         if j:
             ax.set_yticklabels([]); ax.set_ylabel("")
         m = DecisionTreeClassifier(max_depth=d, random_state=42).fit(X_train, y_train)
@@ -252,19 +336,24 @@ def arbol_profundidades(X_train, y_train, X_test, y_test, profundidades=(1, 2, 4
     ax.plot(xs, acc_tr, "o-", color=AZUL, label="entrenamiento")
     ax.plot(xs, acc_te, "s-", color=ROJO, label="prueba (datos nunca vistos)")
     for x, a, b, h in zip(xs, acc_tr, acc_te, hojas):
-        ax.annotate(f"{h:,} hojas", (x, max(a, b)), textcoords="offset points", xytext=(0, 8),
+        ax.annotate(f"{_mil(h)} hojas", (x, max(a, b)), textcoords="offset points", xytext=(0, 8),
                     ha="center", fontsize=8, color=GRIS)
     ax.set_xticks(xs); ax.set_xticklabels(etiquetas); ax.set_xlabel("max_depth del árbol completo (todas las columnas de X)")
-    ax.set_ylabel("accuracy"); ax.legend(loc="center left"); ax.set_ylim(min(acc_te) - 0.03, 1.005)
-    ax.set_title("¿Más profundo = mejor? Solo hasta cierto punto")
-    return _leyenda(fig, "La curva azul sube siempre (el árbol memoriza); la roja sube, se aplana y luego cae. "
-                         "Lo que importa es la roja.")
+    ax.set_ylabel("accuracy"); ax.legend(loc="center left")
+    bajo, alto = min(acc_tr + acc_te), max(acc_tr + acc_te)
+    ax.set_ylim(bajo - 0.02, alto + 0.03)
+    ax.set_title("Abajo: el árbol completo (todas las columnas de X). ¿Más profundo = mejor? Solo hasta cierto punto")
+    fig.text(0.5, 0.965, "Arriba: un árbol que solo ve hora y día, para ver cómo sus rectángulos se vuelven más finos",
+             ha="center", va="bottom", fontsize=11.5, fontweight="bold", color=NEGRO)
+    return _leyenda(fig, "La curva azul (entrenamiento) sube siempre: el árbol memoriza. La roja (prueba) sube, "
+                         "se estanca y luego cae. Lo que importa es la roja.")
 
 
 # ================================================================== utilidades genéricas
 def guardar(fig, ruta):
     """Guarda una figura con la leyenda incluida (para las diapos)."""
-    fig.savefig(ruta, bbox_inches="tight", dpi=160)
+    _espanol(fig)
+    fig.savefig(ruta, bbox_inches="tight", dpi=160, metadata={"Software": None})
     return ruta
 
 
@@ -285,12 +374,13 @@ def supervisado_vs_no_supervisado(n=300):
     return _leyenda(fig, "izquierda: el modelo aprende a imitar el color. Derecha: no hay color que imitar; solo se pueden buscar grupos o resumir.")
 
 
-def formula(latex, ruta=None, fontsize=30, ancho=8, alto=1.4):
-    """Renderiza una fórmula (mathtext de matplotlib) como figura, para pegarla en las diapos."""
+def formula(latex, ruta=None, fontsize=30, ancho=8, alto=1.4, dpi=200):
+    """Renderiza una fórmula (mathtext de matplotlib) como figura, para pegarla en las diapos.
+    Para fórmulas cortas suba `dpi` (p. ej. 400) para que la imagen recortada tenga la misma nitidez en la lámina."""
     fig = plt.figure(figsize=(ancho, alto))
     fig.text(0.5, 0.5, f"${latex}$", ha="center", va="center", fontsize=fontsize, color=NEGRO)
     if ruta:
-        fig.savefig(ruta, bbox_inches="tight", dpi=200, transparent=True)
+        fig.savefig(ruta, bbox_inches="tight", dpi=dpi, transparent=True)
     return fig
 
 
@@ -307,7 +397,7 @@ def mapa_vacios(df, col_orden="fecha", disfrazados=("N/D",), muestra=1500, col_a
     d = d.iloc[idx]
     M = d.isna().astype(int).values
     for j, c in enumerate(d.columns):
-        if d[c].dtype == object:
+        if _es_texto(d[c]):
             M[d[c].astype(str).isin(disfrazados).values, j] = 2
     fig, axes = plt.subplots(1, 2, figsize=(13, 5), gridspec_kw={"width_ratios": [1.6, 1]})
     axes[0].imshow(M, aspect="auto", interpolation="nearest",
@@ -321,7 +411,7 @@ def mapa_vacios(df, col_orden="fecha", disfrazados=("N/D",), muestra=1500, col_a
     axes[0].set_xlabel("cada fila de la imagen es un incidente, ordenados en el tiempo (gris claro = dato presente)")
     axes[0].spines[:].set_visible(False)
     real = df.isna().mean() * 100
-    disf = pd.Series({c: (df[c].astype(str).isin(disfrazados).mean() * 100 if df[c].dtype == object else 0)
+    disf = pd.Series({c: (df[c].astype(str).isin(disfrazados).mean() * 100 if _es_texto(df[c]) else 0)
                       for c in df.columns})
     orden = (real + disf).sort_values().index
     axes[1].barh(orden, real[orden], color="#4D4D4D", label="vacío real (NaN)")
@@ -392,7 +482,7 @@ def vacio_informa(df, col_y, grupos, col_anio="anio", grupo_anio=None):
         c = df.loc[grupos[grupo_anio], col_anio].value_counts().sort_index()
         axes[0, 1].bar(c.index.astype(str), c.values, color=ROJO)
         for x, v in zip(c.index.astype(str), c.values):
-            axes[0, 1].text(x, v, f"{v:,}", ha="center", va="bottom", fontsize=8)
+            axes[0, 1].text(x, v, f"{_mil(v)}", ha="center", va="bottom", fontsize=8)
         axes[0, 1].set_title(f"¿De qué año son las filas «{grupo_anio}»?")
     return _leyenda(fig, "si las filas con vacío tienen una proporción muy distinta de la y, el vacío "
                          "'informa'. La pregunta siguiente es: ¿informa sobre el incidente, o sobre cuándo se registró?")
@@ -403,20 +493,21 @@ def one_hot_ejemplo(df, col, n=6, semilla=3):
     d = (df[[col]].dropna().sample(frac=1, random_state=semilla)
            .groupby(col, group_keys=False).head(1).head(n).reset_index(drop=True))
     dum = pd.get_dummies(d[col], prefix=col, dtype=int)
-    fig, axes = plt.subplots(1, 2, figsize=(14, 0.42 * n + 1.0), gridspec_kw={"width_ratios": [1, 3.2]})
+    fig, axes = plt.subplots(1, 2, figsize=(15, 0.5 * n + 1.3), gridspec_kw={"width_ratios": [1, 3.6]})
     for ax, tabla, titulo in ((axes[0], d, "antes: 1 columna de texto"),
                               (axes[1], dum, f"después: {dum.shape[1]} columnas de 0/1, una por categoría")):
         ax.axis("off"); ax.set_title(titulo)
         t = ax.table(cellText=tabla.values, colLabels=list(tabla.columns), loc="center", cellLoc="center")
-        t.auto_set_font_size(False); t.set_fontsize(8); t.scale(1, 1.35)
+        t.auto_set_font_size(False); t.set_fontsize(11); t.scale(1, 1.6)
+        t.auto_set_column_width(list(range(len(tabla.columns))))
         for (r, cc), cell in t.get_celld().items():
             cell.set_edgecolor("#DDDDDD")
             if r == 0:
                 cell.set_facecolor("#EAF1FA"); cell.set_text_props(fontweight="bold")
             elif tabla is dum and str(cell.get_text().get_text()) == "1":
-                cell.set_facecolor("#F6D5D1")
-    return _leyenda(fig, "cada fila tiene exactamente un 1: la categoría a la que pertenece. Ninguna categoría "
-                         "queda 'mayor' que otra, que es justo lo que pasaría si las numeráramos 1, 2, 3…")
+                cell.set_facecolor("#FFF4CC")
+    return _leyenda(fig, "cada fila tiene exactamente un 1, en la columna de su categoría. Si las numeráramos (1, 2, 3…) "
+                         "el modelo creería que una categoría es 'mayor' que otra; con one-hot ninguna lo es.")
 
 
 def escalado_antes_despues(X, columnas):
@@ -452,13 +543,16 @@ def vs_linea_base(resultados, titulo="¿Cuánto le gana el modelo a la línea ba
         ax.text(x[i] - w / 2, base[i] + 0.005, f"{base[i]:.3f}", ha="center", va="bottom", fontsize=9)
         ax.text(x[i] + w / 2, mod[i] + 0.005, f"{mod[i]:.3f}", ha="center", va="bottom", fontsize=9)
         ax.annotate("", xy=(x[i] + w / 2 + 0.2, mod[i]), xytext=(x[i] + w / 2 + 0.2, base[i]),
-                    arrowprops=dict(arrowstyle="->", color=ROJO, lw=2))
-        ax.text(x[i] + w / 2 + 0.25, (base[i] + mod[i]) / 2, f"+{(mod[i] - base[i]) * 100:.1f}\npuntos",
-                color=ROJO, va="center", fontsize=9, fontweight="bold")
-    ax.set_xticks(x); ax.set_xticklabels(nombres); ax.set_ylim(min(base) - 0.1, 1)
+                    arrowprops=dict(arrowstyle="->", color=NEGRO, lw=2))
+        elim = (mod[i] - base[i]) / (1 - base[i]) * 100
+        ax.text(x[i] + w / 2 + 0.25, (base[i] + mod[i]) / 2,
+                f"+{(mod[i] - base[i]) * 100:.1f} puntos\n= {elim:.0f} % del error\ndel tonto",
+                color=NEGRO, va="center", fontsize=9, fontweight="bold")
+    ax.set_xticks(x); ax.set_xticklabels(nombres); ax.set_ylim(min(base) - 0.1, 1); ax.set_xlim(-0.6, len(nombres) - 1 + 1.05)
     ax.set_ylabel("accuracy en prueba"); ax.legend(loc="upper left", fontsize=8); ax.set_title(titulo)
-    return _leyenda(fig, "no mire la altura de la barra azul sino la flecha roja: eso es lo que el modelo "
-                         "aprendió por encima de adivinar siempre lo mismo.")
+    return _leyenda(fig, "no mire la altura de la barra azul sino la flecha: lo que el modelo gana por encima de adivinar "
+                         "siempre lo mismo. Si las líneas base son distintas, compare el % del error del tonto que elimina, "
+                         "no los puntos.")
 
 
 # ================================================================== S3 — entrenar, probar y no hacerse trampa
@@ -484,6 +578,7 @@ def split_esquema(n_train=0.8, titulo="Separar ANTES de entrenar"):
 def fuga_target_encoding(datos, col, col_y="con_victimas", max_puntos=4000, semilla=1):
     """(A) Por qué la 'tasa de víctimas por dirección' calculada con TODOS los datos hace trampa:
     en las direcciones con UNA sola fila, la tasa es exactamente la respuesta de esa fila."""
+    nom = {"direccion": "dirección"}.get(col, col)          # nombre con tilde para los rótulos
     n = datos[col].map(datos[col].value_counts())
     tasa = datos.groupby(col)[col_y].transform("mean")
     grupos = pd.cut(n, [0, 1, 2, 5, 20, np.inf], labels=["1 fila", "2", "3–5", "6–20", "más de 20"])
@@ -493,15 +588,15 @@ def fuga_target_encoding(datos, col, col_y="con_victimas", max_puntos=4000, semi
     rng = np.random.default_rng(semilla)
     uno = datos[n == 1]
     m = uno.sample(min(max_puntos, len(uno)), random_state=semilla)
-    axes[0].scatter(m[col_y] + rng.normal(0, 0.06, len(m)), tasa.loc[m.index] + rng.normal(0, 0.02, len(m)),
+    axes[0].scatter(m[col_y] + rng.normal(0, 0.06, len(m)), tasa.loc[m.index],
                     s=6, alpha=0.3, c=np.where(m[col_y] == 1, ROJO, AZUL))
     axes[0].set_xticks([0, 1]); axes[0].set_xticklabels(["solo daños (y = 0)", "con víctimas (y = 1)"])
-    axes[0].set_ylabel(f"tasa de víctimas de su {col}")
-    axes[0].set_title(f"Las {len(uno):,} filas cuya {col} aparece UNA sola vez")
+    axes[0].set_ylabel(f"tasa de víctimas de su {nom}")
+    axes[0].set_title(f"Las {_mil(len(uno))} filas cuya {nom} aparece UNA sola vez")
     axes[1].bar(acierto.index.astype(str), acierto.values, color=[ROJO] + [GRIS] * (len(acierto) - 1))
     for i, (a, c) in enumerate(zip(acierto.values, cuantos.values)):
-        axes[1].text(i, a + 1, f"{a:.0f} %\n({c:,} filas)", ha="center", va="bottom", fontsize=8.5)
-    axes[1].set_ylim(0, 115); axes[1].set_xlabel(f"¿cuántas veces aparece la {col}?")
+        axes[1].text(i, a + 1, f"{a:.0f} %\n({_mil(c)} filas)", ha="center", va="bottom", fontsize=8.5)
+    axes[1].set_ylim(0, 115); axes[1].set_xlabel(f"¿cuántas veces aparece la {nom}?")
     axes[1].set_ylabel("% de filas donde 'tasa ≥ 0,5' acierta la y")
     axes[1].set_title("Entre menos se repite, más 'acierta' la tasa")
     return _leyenda(fig, "izquierda: cuando la dirección aparece una vez, su tasa ES la respuesta (0 o 1). "
@@ -523,13 +618,13 @@ def fuga_resultados(resultados, linea_base=None):
         ax.axhline(linea_base, color=NEGRO, ls=":", lw=1); ax.text(x[-1] + 0.6, linea_base, f"línea base {linea_base:.3f}", va="center", fontsize=8)
     ax.set_xticks(x); ax.set_xticklabels(nombres); ax.set_ylim(min(te + [linea_base or 1]) - 0.06, max(tr + te) + 0.04)
     ax.set_ylabel("accuracy"); ax.legend(loc="upper left"); ax.set_title("La misma variable, calculada de dos formas")
-    return _leyenda(fig, "con fuga, la prueba sube y se parece al entrenamiento: parece un gran hallazgo. Calculada bien, "
+    return _leyenda(fig, "con fuga, la prueba sube y se parece al entrenamiento: parece un gran hallazgo. Calculada solo con entrenamiento, "
                          "la prueba BAJA y aparece la brecha con el entrenamiento: la variable solo servía para copiar.")
 
 
 def camino_de_una_fila(modelo, fila, columnas, clases=("solo daños", "con víctimas"), max_pasos=8):
     """(D) El modelo entrenado como FUNCIÓN: una fila real entra, recorre las preguntas del árbol
-    y sale con una predicción. Cada caja es una pregunta; en rojo la respuesta de esta fila."""
+    y sale con una predicción. Cada caja es una pregunta; a la derecha, la respuesta de esta fila."""
     X1 = pd.DataFrame([fila.values], columns=list(columnas))
     t = modelo.tree_
     nodos = modelo.decision_path(X1).indices[:max_pasos + 1]
@@ -542,15 +637,18 @@ def camino_de_una_fila(modelo, fila, columnas, clases=("solo daños", "con víct
         if t.children_left[nodo] == -1:
             p = t.value[nodo][0] / t.value[nodo][0].sum()
             texto = f"HOJA → predice «{clases[int(np.argmax(p))]}»   ({p[1]:.0%} con víctimas entre los casos de entrenamiento que llegaron aquí)"
-            ax.add_patch(FancyBboxPatch((0.6, y - 0.32), 10.8, 0.64, boxstyle="round,pad=0.02", fc=ROJO, ec=ROJO))
+            fc = ROJO if p[1] >= 0.5 else AZUL
+            ax.add_patch(FancyBboxPatch((0.6, y - 0.32), 10.8, 0.64, boxstyle="round,pad=0.02", fc=fc, ec=fc))
             ax.text(6, y, texto, ha="center", va="center", color="white", fontsize=10, fontweight="bold")
         else:
             col = columnas[t.feature[nodo]]; u = t.threshold[nodo]; v = float(fila.iloc[t.feature[nodo]])
-            si = v <= u
-            ax.add_patch(FancyBboxPatch((0.6, y - 0.32), 10.8, 0.64, boxstyle="round,pad=0.02", fc="white", ec=AZUL, lw=1.5))
-            ax.text(1.0, y, f"¿{col} ≤ {u:.2f}?", va="center", fontsize=10, color=NEGRO)
-            ax.text(11.0, y, f"esta fila: {v:g} → {'SÍ' if si else 'NO'}", va="center", ha="right", fontsize=10,
-                    color=ROJO, fontweight="bold")
+            pregunta, invertido = _texto_pregunta(col, u)
+            si = (v <= u) != invertido            # en una dummy, '≤ 0,5' significa 'no'
+            ax.add_patch(FancyBboxPatch((0.6, y - 0.32), 10.8, 0.64, boxstyle="round,pad=0.02", fc="white", ec=GRIS, lw=1.5))
+            ax.text(1.0, y, pregunta, va="center", fontsize=10.5, color=NEGRO, fontweight="bold")
+            valor = ("sí" if v > 0.5 else "no") if invertido else f"{v:g}"
+            ax.text(11.0, y, f"esta fila: {valor} → {'SÍ' if si else 'NO'}", va="center", ha="right", fontsize=10,
+                    color=NEGRO, fontweight="bold")
             ax.annotate("", xy=(6, y - 0.45), xytext=(6, y - 0.32), arrowprops=dict(arrowstyle="->", color=GRIS))
     return _leyenda(fig, "el árbol entrenado no es una tabla: es una función. Esta fila contestó estas preguntas, en este orden, "
                          "y salió por esta hoja. Así se 'explica' una predicción.")
@@ -569,8 +667,9 @@ def recta_residuales(x, y, malas=((5, 0.0), None), xlabel="x", ylabel="y"):
     segmentos son los residuales; el título dice la suma de sus cuadrados (lo que se minimiza)."""
     x = np.asarray(x, float); y = np.asarray(y, float)
     b1, b0 = np.polyfit(x, y, 1)
-    rectas = [(malas[0][0] if malas[0] else y.mean(), malas[0][1] if malas[0] else 0.0, "una recta cualquiera"),
-              (b0, b1, "la recta de mínimos cuadrados")]
+    c0m, c1m = (malas[0][0], malas[0][1]) if malas[0] else (y.mean(), 0.0)
+    t_mala = "una recta plana en el promedio\n(la línea base)" if c1m == 0 else "una recta cualquiera"
+    rectas = [(c0m, c1m, t_mala), (b0, b1, "la recta de mínimos cuadrados")]
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.4), sharey=True)
     xx = np.linspace(x.min(), x.max(), 50)
     for ax, (c0, c1, t) in zip(axes, rectas):
@@ -578,11 +677,11 @@ def recta_residuales(x, y, malas=((5, 0.0), None), xlabel="x", ylabel="y"):
         ax.vlines(x, np.minimum(y, pred), np.maximum(y, pred), color=ROJO, lw=0.8, alpha=0.7)
         ax.scatter(x, y, s=16, color=GRIS, zorder=3)
         ax.plot(xx, c0 + c1 * xx, color=VERDE, lw=2.5)
-        ax.set_title(f"{t}\nsuma de residuales² = {np.sum((y - pred) ** 2):,.0f}")
+        ax.set_title(f"{t}\nsuma de residuales² = {_mil(np.sum((y - pred) ** 2))}")
         ax.set_xlabel(xlabel)
     axes[0].set_ylabel(ylabel)
-    return _leyenda(fig, "cada línea roja es un error (residual). La regresión lineal elige la recta que hace mínima "
-                         "la suma de esos errores AL CUADRADO.")
+    return _leyenda(fig, "cada línea roja es un error (residual). A la izquierda, predecir siempre el promedio (la línea "
+                         "base); a la derecha, la recta que hace mínima la suma de esos errores AL CUADRADO.")
 
 
 def superficie_perdida(x, y, b0_rango=None, b1_rango=None, marcar=None):
@@ -596,15 +695,17 @@ def superficie_perdida(x, y, b0_rango=None, b1_rango=None, marcar=None):
     fig = plt.figure(figsize=(13, 4.8))
     ax3 = fig.add_subplot(1, 2, 1, projection="3d")
     ax3.plot_surface(B0, B1, L, cmap="Greens_r", alpha=0.85, linewidth=0)
-    ax3.set_xlabel("b0 (intercepto)"); ax3.set_ylabel("b1 (pendiente)"); ax3.set_zlabel("pérdida (MSE)")
+    ax3.set_xlabel("β₀ (intercepto)"); ax3.set_ylabel("β₁ (pendiente)"); ax3.set_zlabel("pérdida (MSE)")
     ax3.set_title("La pérdida como un tazón")
     ax = fig.add_subplot(1, 2, 2)
-    cs = ax.contour(B0, B1, L, levels=18, cmap="Greens_r"); ax.clabel(cs, fontsize=7, fmt="%.0f")
-    ax.plot(b0_opt, b1_opt, "*", color=ROJO, ms=16, label=f"mínimo: b0={b0_opt:.1f}, b1={b1_opt:.1f}")
+    niveles = np.unique(np.round(np.linspace(L.min(), np.percentile(L, 60), 8)[1:], -1))
+    cs = ax.contour(B0, B1, L, levels=niveles, cmap="Greens_r", linewidths=1.6, vmin=0, vmax=niveles.max() * 1.6)
+    ax.clabel(cs, fontsize=9, fmt=lambda v: _mil(v), inline=True)
+    ax.plot(b0_opt, b1_opt, "*", color=ROJO, ms=16, label=f"mínimo: β₀ = {_mil(b0_opt, 1)} · β₁ = {_mil(b1_opt, 1)}")
     for (c0, c1, t) in (marcar or []):
         ax.plot(c0, c1, "o", color=AZUL); ax.annotate(t, (c0, c1), xytext=(5, 5), textcoords="offset points", fontsize=8)
-    ax.set_xlabel("b0 (intercepto)"); ax.set_ylabel("b1 (pendiente)"); ax.legend(loc="upper right", fontsize=8)
-    ax.set_title("Vista desde arriba: curvas de nivel")
+    ax.set_xlabel("β₀ (intercepto)"); ax.set_ylabel("β₁ (pendiente)"); ax.legend(loc="upper right", fontsize=9)
+    ax.set_title("Vista desde arriba: curvas de nivel (MSE)")
     return _leyenda(fig, "cada punto del plano es una recta posible; su altura es qué tan mal ajusta. Entrenar = encontrar el fondo.")
 
 
@@ -624,13 +725,13 @@ def descenso_gradiente_paso_a_paso(x, y, eta=0.1, mostrar=(0, 1, 3, 10, 30, 100)
     camino sobre las curvas de nivel y la pérdida que baja paso a paso."""
     x = np.asarray(x, float); y = np.asarray(y, float)
     tray = _descenso(x, y, eta, max(mostrar), inicio)
-    fig = plt.figure(figsize=(14, 7.5))
-    gs = fig.add_gridspec(2, len(mostrar), height_ratios=[1, 1.15], hspace=0.45)
+    fig = plt.figure(figsize=(14, 7.2))
+    gs = fig.add_gridspec(2, len(mostrar), height_ratios=[0.8, 1.2], hspace=0.3)
     xx = np.linspace(x.min(), x.max(), 30)
     for j, k in enumerate(mostrar):
         ax = fig.add_subplot(gs[0, j]); b0, b1, l = tray[min(k, len(tray) - 1)]
         ax.scatter(x, y, s=6, color=GRIS); ax.plot(xx, b0 + b1 * xx, color=VERDE, lw=2.2)
-        ax.set_title(f"paso {k}\nMSE = {l:,.1f}", fontsize=9); ax.set_xticks([]); ax.set_yticks([])
+        ax.set_title(f"paso {k}\nMSE = {_mil(l, 1)}", fontsize=9); ax.set_xticks([]); ax.set_yticks([])
     b1o, b0o = np.polyfit(x, y, 1)
     ax = fig.add_subplot(gs[1, : len(mostrar) // 2])
     B0, B1 = np.meshgrid(np.linspace(min(tray[:, 0].min(), b0o) - 2, max(tray[:, 0].max(), b0o) + 2, 100),
@@ -638,10 +739,12 @@ def descenso_gradiente_paso_a_paso(x, y, eta=0.1, mostrar=(0, 1, 3, 10, 30, 100)
     L = np.mean((y[None, None, :] - (B0[..., None] + B1[..., None] * x[None, None, :])) ** 2, axis=2)
     ax.contour(B0, B1, L, levels=15, cmap="Greens_r", linewidths=0.8)
     ax.plot(tray[:, 0], tray[:, 1], "o-", color=ROJO, ms=3, lw=1); ax.plot(b0o, b1o, "*", color=NEGRO, ms=14)
-    ax.set_xlabel("b0"); ax.set_ylabel("b1"); ax.set_title("El camino sobre el tazón (estrella = fondo)")
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.set_xlabel("β₀ (intercepto)"); ax.set_ylabel("β₁ (pendiente)"); ax.set_title("El camino sobre el tazón (estrella = fondo)")
     ax = fig.add_subplot(gs[1, len(mostrar) // 2:])
-    ax.plot(tray[:, 2], color=ROJO); ax.set_yscale("log"); ax.set_xlabel("paso"); ax.set_ylabel("MSE (escala log)")
-    ax.set_title(f"La pérdida baja en cada paso (η = {eta})")
+    ax.plot(tray[:, 2], color=ROJO, lw=2); ax.set_xlabel("paso"); ax.set_ylabel("pérdida (MSE)")
+    ax.axhline(tray[-1, 2], color=GRIS, ls=":", lw=1); ax.set_ylim(0, None)
+    ax.set_title(f"La pérdida baja en cada paso (η = {f'{eta:g}'.replace('.', ',')})")
     return _leyenda(fig, "en cada paso se calcula hacia dónde sube el tazón (el gradiente) y se da un pasito en contra. "
                          "Arriba se ve el efecto: la recta se acomoda sola a los datos.")
 
@@ -661,14 +764,22 @@ def learning_rate_efecto(x, y, etas=(0.005, 0.1, 0.9, 1.05), pasos=40, inicio=(0
         t = tray[(np.abs(tray[:, 0] - b0o) < span0 * 1.5) & (np.abs(tray[:, 1] - b1o) < span1 * 1.5)]
         ax.plot(t[:, 0], t[:, 1], "o-", color=ROJO, ms=3, lw=1); ax.plot(b0o, b1o, "*", color=NEGRO, ms=12)
         fin = tray[-1, 2]
-        estado = "diverge ✗" if (not np.isfinite(fin) or fin > tray[0, 2]) else ("llega ✓" if fin < _mse(x, y, b0o, b1o) * 1.005 else "no llega aún")
-        ax.set_title(f"η = {eta}  →  {estado}"); ax.set_xticks([]); ax.set_yticks([])
+        dev = tray[:, 0] - b0o; dev = dev[np.abs(dev) > 1e-3 * (abs(dev[0]) + 1e-9)]
+        cruces = int((np.diff(np.sign(dev)) != 0).sum())       # ¿se pasa del fondo de un lado al otro?
+        if not np.isfinite(fin) or fin > tray[0, 2]:
+            estado = "diverge ✗"
+        elif fin < _mse(x, y, b0o, b1o) * 1.005:
+            estado = "zigzag, pero llega ✓" if cruces >= 3 else "llega ✓"
+        else:
+            estado = "no llega aún"
+        ax.set_title(f"η = {f'{eta:g}'.replace('.', ',')}  →  {estado}"); ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xlabel("β₀ (intercepto)"); ax.set_ylabel("β₁ (pendiente)")
         ax.set_xlim(b0o - span0, b0o + span0); ax.set_ylim(b1o - span1, b1o + span1)
     return _leyenda(fig, f"mismos datos, mismo punto de partida, {pasos} pasos. Solo cambia el tamaño del paso: "
                          "es la perilla del OPTIMIZADOR, no del modelo.")
 
 
-def recta_por_grupo(df, x, y, grupo, modelo, columnas, etiquetas=None):
+def recta_por_grupo(df, x, y, grupo, modelo, columnas, etiquetas=None, xlabel=None, ylabel=None, titulo_grupo=None):
     """(B) El modelo lineal entrenado, dibujado sobre los datos: una recta por grupo (las demás
     variables en su valor típico). Rectas paralelas = el grupo suma una constante."""
     fig, ax = plt.subplots(figsize=(11, 4.8))
@@ -681,7 +792,9 @@ def recta_por_grupo(df, x, y, grupo, modelo, columnas, etiquetas=None):
         for cc in [c for c in columnas if c.startswith(f"{grupo}_")]:
             malla[cc] = int(cc == f"{grupo}_{g}")
         ax.plot(xx, modelo.predict(malla[columnas]), color=colores[i % 4], lw=2.5)
-    ax.set_xlabel(x); ax.set_ylabel(y); ax.legend(title=grupo); ax.set_title("Lo que aprendió el modelo, sobre los datos reales")
+    ax.set_xlabel(xlabel or x); ax.set_ylabel(ylabel or y); ax.legend(title=titulo_grupo or grupo)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: _mil(v)))
+    ax.set_title("Lo que aprendió el modelo, sobre los datos reales")
     return _leyenda(fig, "las dos rectas son paralelas: el modelo lineal dice que ser fumador SUMA una cantidad fija, "
                          "a cualquier edad. La distancia entre rectas es el coeficiente.")
 
@@ -700,13 +813,15 @@ def contribuciones_una_fila(modelo, fila, columnas, real=None, unidad="", top=8)
     acum = 0
     for i, (n, v) in enumerate(pasos):
         ax.barh(i, v, left=acum if i else 0, color=GRIS if i == 0 else (VERDE if v >= 0 else ROJO))
-        ax.text((acum + v if i else v) + (0.01 * abs(modelo.intercept_) + 1e-9), i, f"{v:+,.0f}{unidad}", va="center", fontsize=8.5)
+        signo = "+" if v >= 0 else "−"
+        ax.text((acum + v if i else v) + (0.01 * abs(modelo.intercept_) + 1e-9), i, f"{signo}{_mil(abs(v))}{unidad}", va="center", fontsize=8.5)
         acum = acum + v if i else v
-    ax.barh(len(pasos), acum, color=AZUL); ax.text(acum, len(pasos), f"  predicción = {acum:,.0f}{unidad}", va="center", fontweight="bold")
+    ax.barh(len(pasos), acum, color=AZUL); ax.text(acum, len(pasos), f"  predicción = {_mil(acum)}{unidad}", va="center", fontweight="bold")
     ylabels = [n for n, _ in pasos] + ["PREDICCIÓN"]
     if real is not None:
-        ax.axvline(real, color=NEGRO, ls="--", lw=1); ax.text(real, -0.8, f"real: {real:,.0f}{unidad}", ha="center", fontsize=8.5)
+        ax.axvline(real, color=NEGRO, ls="--", lw=1); ax.text(real, -0.8, f"real: {_mil(real)}{unidad}", ha="center", fontsize=8.5)
     ax.set_yticks(range(len(ylabels))); ax.set_yticklabels(ylabels); ax.invert_yaxis()
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: ("−" if x < 0 else "") + _mil(abs(x))))
     ax.set_title("Una fila entra, una predicción sale: la suma de las contribuciones")
     return _leyenda(fig, "cada barra es coeficiente × valor de esa variable para esta persona. Verde suma, rojo resta. "
                          "Un modelo lineal se explica sumando.")
@@ -714,34 +829,53 @@ def contribuciones_una_fila(modelo, fila, columnas, real=None, unidad="", top=8)
 
 def regularizacion_alpha(X_train, y_train, X_test, y_test, alphas=None, destacar=6):
     """(C) Ridge y Lasso al subir alpha: cómo se encogen los coeficientes (variables escaladas) y
-    qué pasa con el R² de prueba. Lasso apaga variables; Ridge solo las encoge."""
+    qué pasa con el R² de prueba. Lasso apaga variables; Ridge solo las encoge.
+
+    Escalas: scikit-learn define Lasso como (1/2n)·SSE + α·Σ|β| y Ridge como SSE + alpha·Σβ². Para que
+    los dos queden en el mismo eje, a Ridge se le pasa alpha = 2n·α (la misma pérdida multiplicada por 2n)."""
     from sklearn.linear_model import Ridge, Lasso
     from sklearn.preprocessing import StandardScaler
+    X_train = X_train.loc[:, X_train.nunique() > 1]                 # columnas constantes: no aportan nada
+    X_test = X_test[X_train.columns]
     sc = StandardScaler().fit(X_train); A, B = sc.transform(X_train), sc.transform(X_test)
-    alphas = alphas if alphas is not None else np.logspace(-2, 1.3, 14)
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.4))
-    for ax, (nombre, M, esc) in zip(axes[:2], [("Ridge", Ridge, 100000), ("Lasso", Lasso, 1)]):
-        coefs, r2 = [], []
-        for a in alphas:
-            m = M(alpha=a * esc, max_iter=20000).fit(A, y_train) if nombre == "Ridge" else M(alpha=a, max_iter=20000).fit(A, y_train)
-            coefs.append(m.coef_); r2.append(m.score(B, y_test))
-        C = np.array(coefs)
-        top = np.argsort(-np.abs(C[0]))[:destacar]
-        for j in range(C.shape[1]):
-            ax.plot(alphas * esc if nombre == "Ridge" else alphas, C[:, j], color=GRIS if j not in top else None,
-                    lw=0.6 if j not in top else 2, alpha=0.5 if j not in top else 1,
-                    label=X_train.columns[j][:28] if j in top else None)
+    alphas = np.asarray(alphas if alphas is not None else np.logspace(-2, 1.3, 14), float)
+    dos_n = 2 * len(X_train)
+    res = {}
+    for nombre, esc in [("Ridge", dos_n), ("Lasso", 1)]:
+        coefs, r2 = {}, {}
+        # Lasso: de α grande a pequeño reutilizando la solución anterior (warm_start) y la matriz XᵀX: mucho más rápido
+        m = Lasso(max_iter=20000, warm_start=True, precompute=A.T @ A) if nombre == "Lasso" else Ridge()
+        for k in np.argsort(-alphas):
+            m.set_params(alpha=alphas[k] * esc).fit(A, y_train)
+            coefs[k] = m.coef_.copy(); r2[k] = m.score(B, y_test)
+        res[nombre] = (np.array([coefs[k] for k in range(len(alphas))]), [r2[k] for k in range(len(alphas))])
+    # las mismas variables y los mismos colores en los dos paneles: las más grandes con el castigo más suave
+    top = list(np.argsort(-np.abs(res["Lasso"][0][0]))[:destacar])
+    paleta = [AZUL, ROJO, MODULO[3], MODULO[4], "#8C6D46", "#4BA3A8", "#D45E9E", NEGRO]
+    color = {j: paleta[k % len(paleta)] for k, j in enumerate(top)}
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
+    for ax, nombre in zip(axes[:2], ["Ridge", "Lasso"]):
+        C = res[nombre][0]
+        for j in [j for j in range(C.shape[1]) if j not in top] + top:      # las destacadas encima
+            ax.plot(alphas, C[:, j], color=color.get(j, GRIS), lw=2 if j in top else 0.6, alpha=1 if j in top else 0.45,
+                    label=(X_train.columns[j][:34] if (j in top and nombre == "Lasso") else None))
         ax.set_xscale("log"); ax.axhline(0, color=NEGRO, lw=0.6)
-        ax.set_xlabel("alpha (fuerza de la penalización)"); ax.set_ylabel("coeficiente (variables escaladas)")
+        ax.set_ylabel("coeficiente (variables escaladas)")
         vivos = int((np.abs(C[-1]) > 1e-6).sum())
-        ax.set_title(f"{nombre}: con alpha máximo quedan {vivos} de {C.shape[1]} ≠ 0")
-        if nombre == "Lasso":
-            ax.legend(fontsize=7, loc="upper right")
-        axes[2].plot(alphas * esc if nombre == "Ridge" else alphas, r2, "o-", label=nombre, ms=3,
-                     color=AZUL if nombre == "Ridge" else ROJO)
-    axes[2].set_xscale("log"); axes[2].set_xlabel("alpha"); axes[2].set_ylabel("R² en prueba"); axes[2].legend()
-    axes[2].set_title("¿Cuánto se pierde al simplificar?")
-    return _leyenda(fig, "al subir alpha los coeficientes se encogen hacia 0. Lasso los APAGA uno a uno (selección de "
+        if nombre == "Ridge":
+            ax.set_xlabel(f"α  (a Ridge se le pasa alpha = 2n·α = {_mil(dos_n)}·α)")
+            ax.set_title(f"Ridge: encoge, pero los {vivos} de {C.shape[1]} siguen ≠ 0")
+        else:
+            ax.set_xlabel("α  (alpha de Lasso)")
+            ax.set_title(f"Lasso: con α = {_mil(alphas[-1], 1)} quedan {vivos} de {C.shape[1]} ≠ 0")
+        axes[2].plot(alphas, res[nombre][1], "o-", label=nombre, ms=3, color=VERDE if nombre == "Ridge" else NEGRO)
+    axes[2].set_xscale("log"); axes[2].set_xlabel("α  (misma escala en los tres paneles)"); axes[2].set_ylabel("R² en prueba")
+    axes[2].legend(loc="lower left"); axes[2].set_title("¿Cuánto se pierde al simplificar?")
+    h, l = axes[1].get_legend_handles_labels()
+    fig.legend(h, l, loc="center left", bbox_to_anchor=(1.0, 0.55), fontsize=9, frameon=False,
+               title="mismo color en\nRidge y en Lasso")
+    fig.tight_layout()
+    return _leyenda(fig, "al subir α los coeficientes se encogen hacia 0. Lasso los APAGA uno a uno (selección de "
                          "variables); Ridge los achica sin apagarlos. A la derecha, el precio en R².")
 
 
@@ -790,7 +924,10 @@ def sigmoide_vs_recta(n=120, semilla=2):
     axes[0].plot(xx, b0 + b1 * xx, color=VERDE, lw=2.5)
     axes[0].fill_between(xx, b0 + b1 * xx, 1, where=(b0 + b1 * xx) > 1, color=ROJO, alpha=0.2)
     axes[0].fill_between(xx, b0 + b1 * xx, 0, where=(b0 + b1 * xx) < 0, color=ROJO, alpha=0.2)
-    axes[0].text(3.2, 1.3, "¿probabilidad > 1?", color=ROJO, ha="center"); axes[0].text(-3.2, -0.35, "¿probabilidad < 0?", color=ROJO, ha="center")
+    axes[0].annotate("¿probabilidad > 1?", xy=(4.3, 1.12), xytext=(-0.5, 1.3), color=ROJO, ha="center", va="center",
+                     arrowprops=dict(arrowstyle="->", color=ROJO, lw=1))
+    axes[0].annotate("¿probabilidad < 0?", xy=(-4.3, -0.12), xytext=(0.5, -0.3), color=ROJO, ha="center", va="center",
+                     arrowprops=dict(arrowstyle="->", color=ROJO, lw=1))
     axes[1].plot(xx, lg.predict_proba(xx.reshape(-1, 1))[:, 1], color=VERDE, lw=2.5)
     axes[0].set_ylabel("y  (1 = sí, 0 = no)")
     return _leyenda(fig, "la recta promete probabilidades imposibles en los extremos. La sigmoide 'dobla' la recta para que "
@@ -808,7 +945,8 @@ def frontera_logistica_2d(n=240):
     im = ax.contourf(xx, yy, P, levels=np.linspace(0, 1, 11), cmap=CMAP_PROB, alpha=0.75)
     ax.contour(xx, yy, P, levels=[0.5], colors=NEGRO, linewidths=2)
     ax.scatter(X["x1"], X["x2"], c=np.where(y == 1, ROJO, AZUL), s=18, edgecolor="white", lw=0.4)
-    fig.colorbar(im, ax=ax, label="probabilidad de 'sí'"); ax.set_xlabel("x1"); ax.set_ylabel("x2")
+    cb = fig.colorbar(im, ax=ax, label="probabilidad de 'sí'"); ax.set_xlabel("x1"); ax.set_ylabel("x2")
+    cb.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.1f}".replace(".", ",")))
     ax.set_title("Regresión logística: frontera recta (línea negra = 50 %)")
     return _leyenda(fig, "la línea negra es donde p = 0,5. Lejos de ella el modelo está seguro; cerca, duda. La frontera "
                          "de una logística siempre es recta (en las variables que le damos).")
@@ -818,19 +956,22 @@ def matrices_confusion(paneles, etiquetas=("no (0)", "sí (1)")):
     """paneles = {"título": (y_real, y_pred)}. Matriz de confusión con nombres en cada celda y
     las dos métricas que cuentan historias distintas: accuracy y recall."""
     from sklearn.metrics import confusion_matrix
-    fig, axes = plt.subplots(1, len(paneles), figsize=(5.3 * len(paneles), 4.6), squeeze=False)
+    fig, axes = plt.subplots(1, len(paneles), figsize=(5.3 * len(paneles), 4.8), squeeze=False)
     nombres = [["verdaderos\nnegativos", "falsos\npositivos"], ["falsos\nnegativos", "verdaderos\npositivos"]]
-    for ax, (t, (yr, yp)) in zip(axes[0], paneles.items()):
+    for k, (ax, (t, (yr, yp))) in enumerate(zip(axes[0], paneles.items())):
         M = confusion_matrix(yr, yp, labels=[0, 1])
         ax.imshow([[0, 1], [1, 0]], cmap=ListedColormap(["#EAF4EE", "#F8E1DE"]))
         for i in range(2):
             for j in range(2):
-                ax.text(j, i, f"{M[i, j]:,}\n{nombres[i][j]}", ha="center", va="center", fontsize=11,
+                ax.text(j, i, f"{_mil(M[i, j])}\n{nombres[i][j]}", ha="center", va="center", fontsize=11,
                         fontweight="bold" if (i, j) == (1, 1) else "normal")
         acc = (M[0, 0] + M[1, 1]) / M.sum(); rec = M[1, 1] / max(M[1].sum(), 1)
+        pre = f"{M[1, 1] / M[:, 1].sum():.3f}" if M[:, 1].sum() else "—"
         ax.set_xticks([0, 1]); ax.set_xticklabels([f"predice {e}" for e in etiquetas])
-        ax.set_yticks([0, 1]); ax.set_yticklabels([f"real {e}" for e in etiquetas])
-        ax.set_title(f"{t}\naccuracy = {acc:.3f} · recall = {rec:.3f}")
+        ax.set_yticks([0, 1]); ax.set_yticklabels([f"real {e}" for e in etiquetas] if k == 0 else [])
+        if k:
+            ax.tick_params(axis="y", length=0)
+        ax.set_title(f"{t}\naccuracy {acc:.3f} · recall {rec:.3f} · precisión {pre}")
         for s in ax.spines.values():
             s.set_visible(False)
     return _leyenda(fig, "accuracy cuenta los aciertos de las dos filas juntas; recall mira solo la fila de abajo: "
@@ -854,30 +995,42 @@ def umbral_efecto(y_real, proba, umbrales=None, marcar=(0.5,)):
     ax.set_xlabel("umbral: llamo si la probabilidad de 'sí' es ≥ umbral"); ax.set_ylabel("valor"); ax.set_ylim(0, 1.08)
     ax.legend(loc="center right"); ax.set_title("La misma probabilidad, distintas decisiones")
     return _leyenda(fig, "con el umbral de 0,5 por defecto el recall es bajísimo. Bajar el umbral encuentra más clientes "
-                         "que dicen sí a cambio de más llamadas en vano: la accuracy casi no se mueve, el negocio sí.")
+                         "que dicen sí a cambio de más llamadas en vano: el accuracy casi no se mueve, el negocio sí.")
 
 
-def logistica_una_fila(modelo, fila_z, columnas, real=None, top=7):
-    """(D) Una fila: contribuciones en la escala de los log-odds (z), y z → probabilidad con la sigmoide."""
+def logistica_una_fila(modelo, fila_z, columnas, real=None, top=7, fila=None):
+    """(D) Una fila: contribuciones en la escala de los log-odds (z), y z → probabilidad con la sigmoide.
+    fila (opcional) = la misma fila SIN escalar, para rotular "variable = valor" (p. ej. "contact_unknown = 0")."""
     c = pd.Series(modelo.coef_[0] * np.asarray(fila_z, float), index=list(columnas))
     principales = c.reindex(c.abs().sort_values(ascending=False).index).head(top)
     resto = c.sum() - principales.sum(); z = modelo.intercept_[0] + c.sum(); p = _sigmoide(z)
-    pasos = [("intercepto", modelo.intercept_[0])] + list(principales.items()) + [("resto de variables", resto)]
+
+    def rotulo(k):
+        if fila is None:
+            return k[:34]
+        return f"{k[:28]} = {_texto_es(f'{float(fila[k]):g}')}"
+    pasos = [("intercepto", modelo.intercept_[0])] + [(rotulo(k), v) for k, v in principales.items()] + [("resto de variables", resto)]
     fig, axes = plt.subplots(1, 2, figsize=(14, 0.42 * len(pasos) + 2.2), gridspec_kw={"width_ratios": [1.6, 1]})
     ax = axes[0]; acum = 0
     for i, (n, v) in enumerate(pasos):
-        ax.barh(i, v, left=acum, color=GRIS if i == 0 else (ROJO if v >= 0 else AZUL)); acum += v
-        ax.text(acum, i, f" {v:+.2f}", va="center", fontsize=8)
-    ax.barh(len(pasos), z, color=VERDE); ax.text(z, len(pasos), f"  z = {z:.2f}", va="center", fontweight="bold")
-    ax.set_yticks(range(len(pasos) + 1)); ax.set_yticklabels([n[:34] for n, _ in pasos] + ["SUMA (z)"]); ax.invert_yaxis()
+        ax.barh(i, v, left=acum, color=GRIS if i == 0 else (VERDE if v >= 0 else ROJO)); acum += v
+        ax.text(acum, i, f" {'+' if v >= 0 else '−'}{abs(v):.2f}", va="center", fontsize=8)
+    ax.barh(len(pasos), z, color=AZUL); ax.text(z, len(pasos), f"  z = {z:.2f}", va="center", fontweight="bold")
+    ax.set_yticks(range(len(pasos) + 1)); ax.set_yticklabels([n for n, _ in pasos] + ["SUMA (z)"]); ax.invert_yaxis()
     ax.axvline(0, color=NEGRO, lw=0.6); ax.set_title("1. Se suman las contribuciones (log-odds)")
     zz = np.linspace(-6, 6, 200); ax = axes[1]
-    ax.plot(zz, _sigmoide(zz), color=VERDE, lw=2.5); ax.axhline(0.5, color=GRIS, ls=":", lw=1)
-    ax.plot([z, z], [0, p], color=ROJO, ls="--"); ax.plot([zz[0], z], [p, p], color=ROJO, ls="--"); ax.plot(z, p, "o", color=ROJO, ms=9)
+    ax.plot(zz, _sigmoide(zz), color=AZUL, lw=2.5); ax.axhline(0.5, color=GRIS, ls=":", lw=1)
+    ax.plot([z, z], [0, p], color=NEGRO, ls="--"); ax.plot([zz[0], z], [p, p], color=NEGRO, ls="--"); ax.plot(z, p, "o", color=NEGRO, ms=9)
     ax.set_title(f"2. La sigmoide convierte z en probabilidad: {p:.0%}" + (f"\n(lo que pasó: {'sí' if real == 1 else 'no'})" if real is not None else ""))
     ax.set_xlabel("z"); ax.set_ylabel("probabilidad de 'sí'")
+    hay_rojo = any(v < 0 for _, v in pasos[1:])
+    colores = ("Verde empuja hacia 'sí', rojo hacia 'no' (como en la Sesión 4: verde suma, rojo resta)." if hay_rojo else
+               "Verde empuja hacia 'sí' (a este cliente casi todo lo empuja hacia 'sí'; lo que empujara hacia 'no' saldría en rojo).")
+    if fila is not None:
+        colores += (" Cada aporte es coeficiente × valor ESCALADO: una variable 0/1 que vale 0 queda por debajo de su promedio "
+                    "(valor escalado negativo), así que un coeficiente negativo con '= 0' aporta positivo.")
     return _leyenda(fig, "la logística es una regresión lineal 'doblada': primero suma como en la Sesión 4, después pasa la "
-                         "suma por la sigmoide. Rojo empuja hacia 'sí', azul hacia 'no'.")
+                         "suma por la sigmoide (el intercepto, en gris, es el punto de partida). " + colores)
 
 
 def knn_vecinos(k=7, n=120, punto=(0.6, 0.2)):
@@ -911,12 +1064,12 @@ def knn_k_efecto(ks=(1, 5, 25, 101), n=300):
         m = KNeighborsClassifier(k).fit(Xtr, ytr)
         ax.contourf(xx, yy, m.predict_proba(malla)[:, 1].reshape(xx.shape), levels=np.linspace(0, 1, 11), cmap=CMAP_PROB, alpha=0.7)
         ax.scatter(Xtr["x1"], Xtr["x2"], c=np.where(ytr == 1, ROJO, AZUL), s=10, edgecolor="white", lw=0.3)
-        ax.set_title(f"k = {k}\ntrain {m.score(Xtr, ytr):.2f} · prueba {m.score(Xte, yte):.2f}"); ax.set_xticks([]); ax.set_yticks([])
-    return _leyenda(fig, "con k = 1 cada punto de entrenamiento se 'defiende' solo (train perfecto: sobreajuste, como el árbol "
-                         "sin límite). Con k grande la frontera se suaviza (y si k se acerca al total de datos, todo se vuelve la clase mayoritaria). k es una perilla del MODELO.")
+        ax.set_title(f"k = {k}\nentrenamiento {m.score(Xtr, ytr):.2f} · prueba {m.score(Xte, yte):.2f}"); ax.set_xticks([]); ax.set_yticks([])
+    return _leyenda(fig, "con k = 1 cada punto de entrenamiento se 'defiende' solo (acierto perfecto en entrenamiento: sobreajuste, como el árbol "
+                         "sin límite). Con k grande la frontera se suaviza (y si k se acerca al total de datos, tiende a decir siempre la clase mayoritaria). k es una perilla del MODELO.")
 
 
-def knn_escala(df, col_x, col_y, k=15, i_punto=0, semilla=0, n=1500):
+def knn_escala(df, col_x, col_y, k=15, i_punto=0, semilla=0, n=1500, xlabel=None, ylabel=None):
     """La misma búsqueda de vecinos con las variables en sus unidades y escaladas. Si una variable
     tiene una escala enorme, 'cercano' solo significa 'cercano en esa variable'."""
     d = df[[col_x, col_y]].dropna().sample(min(n, len(df)), random_state=semilla).reset_index(drop=True)
@@ -925,11 +1078,28 @@ def knn_escala(df, col_x, col_y, k=15, i_punto=0, semilla=0, n=1500):
     for ax, (datos, t) in zip(axes, [(d, "Sin escalar"), (Z, "Escalado (z)")]):
         dist = np.sqrt(((datos.values - datos.values[i_punto]) ** 2).sum(axis=1)); idx = np.argsort(dist)[1:k + 1]
         ax.scatter(d[col_x], d[col_y], s=6, color=GRIS, alpha=0.4)
-        ax.scatter(d.iloc[idx][col_x], d.iloc[idx][col_y], s=40, color=ROJO, edgecolor=NEGRO, lw=0.5)
-        ax.plot(d.iloc[i_punto][col_x], d.iloc[i_punto][col_y], "*", ms=20, color=VERDE, markeredgecolor=NEGRO)
-        ax.set_xlabel(col_x); ax.set_ylabel(col_y); ax.set_title(f"{t}: los {k} vecinos del cliente ★")
+        x0, y0 = d.iloc[i_punto][col_x], d.iloc[i_punto][col_y]
+        ax.plot(x0, y0, "*", ms=26, color="none", markeredgecolor=VERDE, mew=2.2, zorder=3)
+        ax.scatter(d.iloc[idx][col_x], d.iloc[idx][col_y], s=26, color=ROJO, edgecolor="white", lw=0.5, zorder=5)
+        ax.set_xlabel(xlabel or col_x); ax.set_ylabel(ylabel or col_y)
+        ax.set_title(f"{t}: los {k} vecinos (rojo) del cliente ☆")
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: _mil(v)))
         ax.set_ylim(d[col_y].quantile(0.01), d[col_y].quantile(0.99))
-    return _leyenda(fig, f"sin escalar, {col_y} (miles) aplasta a {col_x} (decenas): los 'vecinos' tienen cualquier edad. "
+        if t.startswith("Escalado"):
+            # Zoom: escalados, los vecinos quedan tan cerca que la estrella los tapa en la vista completa.
+            vx, vy = d.iloc[idx][col_x], d.iloc[idx][col_y]
+            mx = max(1.0, (vx - x0).abs().max()) * 1.6; my = max(50.0, (vy - y0).abs().max()) * 1.6
+            ins = ax.inset_axes([0.58, 0.5, 0.4, 0.46])
+            cerca = d[(d[col_x].sub(x0).abs() <= mx) & (d[col_y].sub(y0).abs() <= my)]
+            ins.scatter(cerca[col_x], cerca[col_y], s=10, color=GRIS, alpha=0.5)
+            ins.plot(x0, y0, "*", ms=16, color="none", markeredgecolor=VERDE, mew=1.8, zorder=3)
+            ins.scatter(vx, vy, s=30, color=ROJO, edgecolor="white", lw=0.5, zorder=5)
+            ins.set_xlim(x0 - mx, x0 + mx); ins.set_ylim(y0 - my, y0 + my)
+            ins.tick_params(labelsize=7); ins.set_title("zoom", fontsize=8)
+            ins.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: _mil(v)))
+            ax.indicate_inset_zoom(ins, edgecolor=NEGRO, alpha=0.6)
+    nx, ny = (xlabel or col_x).split(" (")[0], (ylabel or col_y).split(" (")[0]
+    return _leyenda(fig, f"sin escalar, el {ny} (miles) aplasta a la {nx} (decenas): los 'vecinos' tienen cualquier {nx}. "
                          "Escalado, los vecinos se parecen en las dos cosas.")
 
 
@@ -942,10 +1112,10 @@ def arbol_vs_bosque(n=300, n_arboles=(1, 2, 3), semilla=3):
     X, y = _sinteticos_2c(n, semilla=semilla)
     xx, yy = np.meshgrid(np.linspace(-3.5, 3.5, 150), np.linspace(-3.5, 3.5, 150))
     malla = pd.DataFrame({"x1": xx.ravel(), "x2": yy.ravel()})
-    rf = RandomForestClassifier(200, random_state=0, max_features=1).fit(X, y)
+    rf = RandomForestClassifier(300, random_state=0, max_features=1).fit(X, y)
     paneles = [("un árbol sin límite", DecisionTreeClassifier(random_state=0).fit(X, y))]
     paneles += [(f"árbol {k} del bosque\n(muestra bootstrap)", rf.estimators_[k - 1]) for k in n_arboles]
-    paneles += [("el bosque: promedio\nde 200 árboles", rf)]
+    paneles += [("el bosque: promedio\nde 300 árboles", rf)]
     fig, axes = plt.subplots(1, len(paneles), figsize=(3.4 * len(paneles), 3.9))
     for ax, (t, m) in zip(axes, paneles):
         P = m.predict_proba(malla.values if m is not rf and m is not paneles[0][1] else malla)[:, 1].reshape(xx.shape)
@@ -956,7 +1126,7 @@ def arbol_vs_bosque(n=300, n_arboles=(1, 2, 3), semilla=3):
                          "errores se cancelan y queda una frontera suave. Eso es un bosque aleatorio.")
 
 
-def complejidad_auc(X_tr, y_tr, X_te, y_te, profundidades=(2, 4, 6, 8, 12, 16, None), n_arboles=150):
+def complejidad_auc(X_tr, y_tr, X_te, y_te, profundidades=(2, 4, 8, 16, None), n_arboles=60):
     """(C) AUC de entrenamiento y prueba de un árbol y de un bosque, para cada max_depth."""
     from sklearn.tree import DecisionTreeClassifier
     from sklearn.ensemble import RandomForestClassifier
@@ -975,9 +1145,12 @@ def complejidad_auc(X_tr, y_tr, X_te, y_te, profundidades=(2, 4, 6, 8, 12, 16, N
     ax.plot(xs, r["bosque train"], "s--", color=VERDE, alpha=0.6, label="bosque · entrenamiento")
     ax.plot(xs, r["bosque prueba"], "s-", color=VERDE, lw=2.5, label="bosque · prueba")
     ax.set_xticks(xs); ax.set_xticklabels(et); ax.set_xlabel("max_depth"); ax.set_ylabel("AUC")
-    ax.legend(loc="lower left"); ax.set_title("Más profundo: el árbol se desploma en prueba; el bosque no")
-    return _leyenda(fig, "las líneas punteadas (entrenamiento) suben siempre. Lo que importa son las sólidas: el árbol "
-                         "solo empeora al crecer; el bosque aguanta porque promedia árboles que se equivocan distinto.")
+    ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), frameon=False)
+    mejor = et[int(np.argmax(r["árbol prueba"]))]
+    ax.set_title(f"Más profundo: el árbol mejora hasta max_depth = {mejor} y luego se desploma en prueba; el bosque no")
+    return _leyenda(fig, f"las líneas punteadas (entrenamiento) suben siempre. Lo que importa son las sólidas: el árbol solo "
+                         f"mejora hasta una profundidad de {mejor} y luego se desploma en prueba; el bosque ({n_arboles} árboles) "
+                         "aguanta porque promedia árboles que se equivocan distinto.")
 
 
 def roc_explicada(y_real, proba, umbrales=(0.7, 0.5, 0.3, 0.2, 0.1)):
@@ -1000,7 +1173,7 @@ def roc_explicada(y_real, proba, umbrales=(0.7, 0.5, 0.3, 0.2, 0.1)):
                          "es la probabilidad de que el modelo ponga a un 'sí' por encima de un 'no'.")
 
 
-def curvas_roc(modelos, y_real):
+def curvas_roc(modelos, y_real, titulo="¿Qué modelo ordena mejor a los clientes?", leyenda=None):
     """modelos = {"nombre": probabilidades}. Varias curvas ROC en el mismo plano."""
     from sklearn.metrics import roc_curve, roc_auc_score
     colores = [GRIS, AZUL, VERDE, ROJO, MODULO[3], MODULO[4]]
@@ -1009,15 +1182,16 @@ def curvas_roc(modelos, y_real):
         f, t, _ = roc_curve(y_real, p); ax.plot(f, t, color=c, lw=2.2, label=f"{n} · AUC {roc_auc_score(y_real, p):.3f}")
     ax.plot([0, 1], [0, 1], color=GRIS, ls=":", lw=1)
     ax.set_xlabel("tasa de falsos positivos"); ax.set_ylabel("recall"); ax.legend(loc="lower right", fontsize=8.5)
-    ax.set_aspect("equal"); ax.set_title("¿Qué modelo ordena mejor a los clientes?")
-    return _leyenda(fig, "la curva más arriba y a la izquierda gana en TODOS los umbrales. El AUC permite comparar modelos "
-                         "sin haber elegido todavía el umbral.")
+    ax.set_aspect("equal"); ax.set_title(titulo)
+    return _leyenda(fig, leyenda or "la curva más arriba y a la izquierda gana en TODOS los umbrales. El AUC permite comparar "
+                                    "modelos sin haber elegido todavía el umbral.")
 
 
 def importancias(modelo, columnas, top=12, titulo="¿Qué variables usa el bosque?"):
     s = pd.Series(modelo.feature_importances_, index=list(columnas)).sort_values().tail(top)
     fig, ax = plt.subplots(figsize=(9, 0.38 * top + 1.2))
-    ax.barh(s.index, s.values, color=VERDE); ax.set_xlabel("importancia (reducción de Gini, suma 1)"); ax.set_title(titulo)
+    ax.barh(s.index, s.values, color=VERDE); ax.set_xlabel("importancia (reducción de Gini; todas suman 1)")
+    ax.set_ylabel("columna (después del one-hot)"); ax.set_title(titulo)
     return _leyenda(fig, "importancia = cuánto ayudó cada variable a purificar los cortes, sumado en todos los árboles. "
                          "Dice qué USA el modelo, no qué CAUSA el resultado.")
 
@@ -1029,20 +1203,24 @@ def bosque_una_fila(bosque, fila, real=None):
     ax.hist(votos, bins=np.linspace(0, 1, 21), color=VERDE, edgecolor="white")
     ax.axvline(votos.mean(), color=ROJO, lw=2.5); ax.axvline(0.5, color=GRIS, ls="--")
     ax.text(votos.mean(), ax.get_ylim()[1] * 0.92, f"  promedio = {votos.mean():.2f}", color=ROJO, fontweight="bold")
+    ax.text(0.5, ax.get_ylim()[1] * 0.78, "  umbral 0,5", color=GRIS, fontsize=9)
     ax.set_xlabel("probabilidad de 'sí' que da cada árbol"); ax.set_ylabel("número de árboles")
     ax.set_title(f"Los {len(votos)} árboles opinan sobre el mismo cliente" + (f" (lo que pasó: {'sí' if real == 1 else 'no'})" if real is not None else ""))
-    return _leyenda(fig, "ningún árbol decide solo: el bosque promedia sus opiniones. Si los árboles están muy divididos, "
-                         "la predicción es poco segura aunque el promedio cruce el umbral.")
+    lado = "por debajo" if votos.mean() < 0.5 else "por encima"
+    return _leyenda(fig, f"cada barra cuenta cuántos árboles le dieron esa probabilidad a este cliente. La línea roja es el promedio "
+                         f"(lo que predice el bosque) y queda {lado} del umbral 0,5 (gris). Si los árboles están muy divididos, "
+                         "la predicción es poco segura.")
 
 
-def distribucion_por_clase(df, col, col_y, etiquetas=("no", "sí"), recorte=0.98, unidad=""):
+def distribucion_por_clase(df, col, col_y, etiquetas=("no", "sí"), recorte=0.98, unidad="", xlabel=None):
     """Histograma de una variable separada por la clase de la y (para ver si 'predice demasiado')."""
     lim = df[col].quantile(recorte)
     fig, ax = plt.subplots(figsize=(11, 4))
     for v, c, e in ((0, AZUL, etiquetas[0]), (1, ROJO, etiquetas[1])):
         s = df.loc[df[col_y] == v, col]
         ax.hist(s.clip(upper=lim), bins=50, alpha=0.55, color=c, density=True, label=f"{e} · mediana {s.median():.0f}{unidad}")
-    ax.set_xlabel(col); ax.set_ylabel("densidad"); ax.legend(); ax.set_title(f"{col} según la respuesta")
+    ax.set_xlabel(xlabel or col); ax.set_ylabel("densidad"); ax.legend(title="respuesta del cliente")
+    ax.set_title(f"{(xlabel or col).split(' (')[0].capitalize()} según la respuesta")
     return _leyenda(fig, "las dos distribuciones se separan mucho más que con cualquier otra variable (la última barra junta todo lo que pasa del percentil 98). "
                          "Antes de usarla, la pregunta de la Sesión 3: ¿la tendría antes de conocer la y?")
 
@@ -1090,23 +1268,32 @@ def _lloyd(X, k, semilla, pasos):
     return estados
 
 
-def kmeans_iteraciones(X, k=4, semilla=3, mostrar=(0, 1, 2, -1)):
-    """(A) K-means paso a paso: centroides al azar → cada punto al más cercano → cada centroide
-    al promedio de sus puntos → repetir hasta que nada cambie."""
+def kmeans_iteraciones(X, k=4, semilla=3, mostrar=(0, 1, 2, -1), semilla_referencia=42):
+    """(A) K-means paso a paso (algoritmo de Lloyd: el K-means básico, que alterna asignar y promediar):
+    centroides al azar → cada punto al más cercano → cada centroide al promedio de sus puntos → repetir
+    hasta que nada cambie. Los colores se emparejan con KMeans(k, n_init=10, random_state=semilla_referencia),
+    para que cada grupo tenga el mismo color que en `kmeans_resultado`."""
+    from sklearn.cluster import KMeans
+    from scipy.optimize import linear_sum_assignment
     Xv = np.asarray(pd.DataFrame(X).iloc[:, :2], float)
     _, _, (cx, cy) = _xy(X)
     est = _lloyd(Xv, k, semilla, 50)
+    ref = KMeans(k, n_init=10, random_state=semilla_referencia).fit(Xv).cluster_centers_
+    costo = ((est[-1][3][:, None, :] - ref[None, :, :]) ** 2).sum(axis=2)
+    _, perm = linear_sum_assignment(costo)            # grupo j de Lloyd ↔ grupo perm[j] de scikit-learn
+    est = [(C, perm[lab], iner, nuevos) for C, lab, iner, nuevos in est]
+    col_c = [COLORES_CLUSTER[perm[j]] for j in range(k)]
     idx = [i if i >= 0 else len(est) + i for i in mostrar]
     fig, axes = plt.subplots(1, len(idx), figsize=(3.9 * len(idx), 4.1), sharex=True, sharey=True)
     for ax, i in zip(axes, idx):
         C, lab, iner, nuevos = est[i]
         ax.scatter(Xv[:, 0], Xv[:, 1], c=_col_cluster(lab), s=12, alpha=0.75, edgecolor="white", lw=0.2)
-        ax.scatter(C[:, 0], C[:, 1], marker="X", s=230, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.6, zorder=4)
+        ax.scatter(C[:, 0], C[:, 1], marker="X", s=230, c=col_c, edgecolor=NEGRO, lw=1.6, zorder=4)
         if i < len(est) - 1:
             for a, b in zip(C, nuevos):
                 ax.annotate("", xy=b, xytext=a, arrowprops=dict(arrowstyle="->", color=NEGRO, lw=1.6))
         etapa = "inicio: centroides al azar" if i == 0 else ("final: ya no se mueven" if i == len(est) - 1 else f"iteración {i}")
-        ax.set_title(f"{etapa}\ninercia = {iner:,.0f}", fontsize=10)
+        ax.set_title(f"{etapa}\ninercia = {_mil(iner)}", fontsize=10)
         ax.set_xlabel(cx)
     axes[0].set_ylabel(cy)
     plt.tight_layout()
@@ -1128,7 +1315,7 @@ def kmeans_resultado(X, modelo, titulo=None):
     C = modelo.cluster_centers_
     ax.scatter(C[:, 0], C[:, 1], marker="X", s=260, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.6, zorder=4)
     ax.set_xlabel(cx); ax.set_ylabel(cy)
-    ax.set_title(titulo or f"K-means con k = {k} · inercia {modelo.inertia_:,.0f}")
+    ax.set_title(titulo or f"K-means con k = {k} · inercia {_mil(modelo.inertia_)}")
     return _leyenda(fig, "cada región de color es 'todo lo que queda más cerca de ese centroide que de los demás'. "
                          "Las fronteras son rectas: K-means siempre parte el plano en polígonos.")
 
@@ -1143,7 +1330,7 @@ def kmeans_k_efecto(X, ks=(2, 3, 4, 6), semilla=42):
         m = KMeans(k, n_init=10, random_state=semilla).fit(X)
         ax.scatter(x, y, c=_col_cluster(m.labels_), s=10, edgecolor="white", lw=0.2)
         ax.scatter(*m.cluster_centers_[:, :2].T, marker="X", s=150, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.2)
-        ax.set_title(f"k = {k}\ninercia {m.inertia_:,.0f} · silueta {silhouette_score(X, m.labels_):.2f}", fontsize=10)
+        ax.set_title(f"k = {k}\ninercia {_mil(m.inertia_)} · silueta {silhouette_score(X, m.labels_):.2f}", fontsize=10)
         ax.set_xlabel(cx)
     axes[0].set_ylabel(cy)
     plt.tight_layout()
@@ -1151,7 +1338,7 @@ def kmeans_k_efecto(X, ks=(2, 3, 4, 6), semilla=42):
                          "reales en pedazos; con k de menos junta grupos distintos.")
 
 
-def codo_silueta(X, ks=range(1, 10), semilla=42, marcar=None):
+def codo_silueta(X, ks=range(1, 10), semilla=42, marcar=None, leyenda=None):
     """Dos ayudas para elegir k: la inercia (baja siempre) y la silueta (más alta = grupos mejor separados)."""
     from sklearn.cluster import KMeans
     from sklearn.metrics import silhouette_score
@@ -1165,11 +1352,14 @@ def codo_silueta(X, ks=range(1, 10), semilla=42, marcar=None):
     axes[1].plot(ks, sil, "o-", color=NEGRO, lw=2); axes[1].set_xlabel("k"); axes[1].set_ylabel("silueta promedio")
     axes[1].set_title("La silueta: ¿qué tan bien separados quedan?")
     if marcar:
-        for ax in axes:
-            ax.axvline(marcar, color=ROJO, ls="--", lw=1.2)
+        for m_ in np.atleast_1d(marcar):
+            for ax in axes:
+                ax.axvline(m_, color=ROJO, ls="--", lw=1.2)
+            axes[1].annotate(f"k = {m_}", (m_, sil[ks.index(m_)]), xytext=(8, 6), textcoords="offset points",
+                             color=ROJO, fontsize=9.5, fontweight="bold")
     plt.tight_layout()
-    return _leyenda(fig, "no se elige el k de menor inercia (sería k = n, un grupo por punto). Se busca el codo, donde "
-                         "agregar un grupo deja de ayudar mucho, y se mira la silueta. Son pistas, no veredictos.")
+    return _leyenda(fig, leyenda or ("no se elige el k de menor inercia (sería k = n, un grupo por punto). Se busca el codo, donde "
+                                     "agregar un grupo deja de ayudar mucho, y se mira la silueta. Son pistas, no veredictos."))
 
 
 def kmeans_semillas(X, k=4, semillas=(0, 1, 2, 3)):
@@ -1181,11 +1371,12 @@ def kmeans_semillas(X, k=4, semillas=(0, 1, 2, 3)):
         m = KMeans(k, init="random", n_init=1, random_state=s).fit(X)
         ax.scatter(x, y, c=_col_cluster(m.labels_), s=10, edgecolor="white", lw=0.2)
         ax.scatter(*m.cluster_centers_[:, :2].T, marker="X", s=150, c=COLORES_CLUSTER[:k], edgecolor=NEGRO, lw=1.2)
-        ax.set_title(f"semilla {s} · n_init=1\ninercia {m.inertia_:,.0f}", fontsize=10); ax.set_xlabel(cx)
+        ax.set_title(f"semilla {s} · init='random', n_init=1\ninercia {_mil(m.inertia_)}", fontsize=10); ax.set_xlabel(cx)
     axes[0].set_ylabel(cy)
     plt.tight_layout()
-    return _leyenda(fig, "mismos datos, mismo k, distinto punto de partida: a veces termina en una solución peor (inercia "
-                         "más alta). Por eso n_init=10 corre 10 arranques y se queda con el de menor inercia.")
+    return _leyenda(fig, "mismos datos, mismo k, un solo arranque con centroides al azar (init='random', la versión básica): a veces "
+                         "termina en una solución peor (inercia más alta). Por eso n_init=10 corre 10 arranques y se queda con el de menor "
+                         "inercia; el arranque por defecto de scikit-learn (k-means++) además empieza con centroides separados.")
 
 
 def dbscan_idea(X, eps=0.5, min_samples=5, ejemplos=3, semilla=0):
@@ -1208,11 +1399,11 @@ def dbscan_idea(X, eps=0.5, min_samples=5, ejemplos=3, semilla=0):
             i = rng.choice(np.where(mask)[0])
             ax.add_patch(plt.Circle(Xv[i], eps, fill=False, ls="--", color=NEGRO, lw=1.2))
             n = int((np.sqrt(((Xv - Xv[i]) ** 2).sum(1)) <= eps).sum())
-            ax.annotate(f"{tipo}: {n} vecinos en ε", Xv[i], xytext=(12, 12), textcoords="offset points", fontsize=9,
+            ax.annotate(f"{tipo}: {n} puntos en ε (incluido él)", Xv[i], xytext=(12, 12), textcoords="offset points", fontsize=9,
                         bbox=dict(boxstyle="round", fc="white", ec=GRIS))
     ax.set_aspect("equal"); ax.set_xlabel(cx); ax.set_ylabel(cy); ax.legend(loc="lower right")
     k = len(set(m.labels_)) - (1 if ruido.any() else 0)
-    ax.set_title(f"DBSCAN (ε = {eps}, min_samples = {min_samples}): {k} clusters y {ruido.sum()} puntos de ruido")
+    ax.set_title(f"DBSCAN (ε = {eps}, min_samples = {min_samples}): {k} cluster{'s' if k != 1 else ''} y {ruido.sum()} puntos de ruido")
     return _leyenda(fig, "DBSCAN no recibe k: busca zonas densas. Círculo de radio ε alrededor de cada punto; si adentro hay "
                          "al menos min_samples puntos, es núcleo. Los núcleos encadenados son un cluster; lo suelto es ruido.")
 
@@ -1226,7 +1417,7 @@ def dbscan_eps(X, epsilons=(0.1, 0.2, 0.3, 0.6), min_samples=5):
         lab = DBSCAN(eps=e, min_samples=min_samples).fit_predict(X)
         k = len(set(lab)) - (1 if -1 in lab else 0)
         ax.scatter(x, y, c=_col_cluster(lab), s=10, edgecolor="white", lw=0.2)
-        ax.set_title(f"ε = {e}\n{k} clusters · {np.sum(lab == -1)} de ruido", fontsize=10); ax.set_xlabel(cx)
+        ax.set_title(f"ε = {e}\n{k} cluster{'s' if k != 1 else ''} · {np.sum(lab == -1)} de ruido", fontsize=10); ax.set_xlabel(cx)
     axes[0].set_ylabel(cy)
     plt.tight_layout()
     return _leyenda(fig, "ε es 'qué tan cerca es cerca'. Muy pequeño: casi nadie tiene vecinos y todo es ruido (gris). "
@@ -1297,12 +1488,15 @@ def kmeans_una_fila(paneles, columnas):
         for v in range(len(columnas)):
             ax.barh(range(len(centros)), aportes[:, v], left=izq, color=colores[v % len(colores)], label=columnas[v], edgecolor="white")
             izq += aportes[:, v]
-        fmt = (lambda t: f"{t:,.0f}") if total.max() > 1000 else (lambda t: f"{t:.2f}")
+        fmt = (lambda t: f"{_mil(t)}") if total.max() > 1000 else (lambda t: f"{t:.2f}")
         for j, t in enumerate(total):
             ax.text(t, j, "  " + fmt(t) + ("  ← gana" if j == gana else ""), va="center", fontweight="bold" if j == gana else "normal", fontsize=9)
         ax.set_yticks(range(len(centros))); ax.set_yticklabels([f"cluster {j}" for j in range(len(centros))]); ax.invert_yaxis()
         ax.set_xlim(0, total.max() * 1.45); ax.set_title(titulo); ax.set_xlabel("distancia² al centroide")
-        ax.ticklabel_format(axis="x", style="plain") if total.max() > 1000 else None
+        if total.max() > 1e5:      # gramos²: el eje en millones, legible
+            from matplotlib.ticker import FuncFormatter
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _p: _mil(v / 1e6, 1) if v else "0"))
+            ax.set_xlabel("distancia² al centroide (millones)")
     axes[-1].legend(loc="lower right", fontsize=8.5)
     plt.tight_layout()
     return _leyenda(fig, "K-means asigna midiendo la distancia a cada centroide y escogiendo la más corta. Los colores "
@@ -1361,10 +1555,10 @@ def pca_proyeccion(n=200, semilla=0):
     ax.set_title("Resultado: 2 columnas → 1"); ax.spines["left"].set_visible(False)
     plt.tight_layout()
     return _leyenda(fig, "PCA busca la dirección en la que los puntos quedan más esparcidos (PC1) y proyecta sobre ella: "
-                         "las sombras sobre la línea naranja conservan casi toda la información; sobre la roja, se amontonan.")
+                         "las sombras sobre la línea naranja conservan casi toda la varianza; sobre la roja, se amontonan.")
 
 
-def pca_varianza(pca, marcar=0.9, max_comp=None, titulo=""):
+def pca_varianza(pca, marcar=0.9, max_comp=None, titulo="", leyenda=None):
     """(B) Varianza explicada por cada componente y acumulada. ¿Cuántas columnas necesito?"""
     r = pca.explained_variance_ratio_[: max_comp or len(pca.explained_variance_ratio_)]
     acum = np.cumsum(r); xs = np.arange(1, len(r) + 1)
@@ -1375,15 +1569,16 @@ def pca_varianza(pca, marcar=0.9, max_comp=None, titulo=""):
         k = int(np.argmax(acum >= marcar) + 1) if (acum >= marcar).any() else None
         ax.axhline(marcar, color=ROJO, ls="--", lw=1)
         if k:
-            ax.axvline(k, color=ROJO, ls=":", lw=1); ax.text(k, marcar - 0.1, f"  {k} componentes → {marcar:.0%}", color=ROJO)
+            ax.axvline(k, color=ROJO, ls=":", lw=1)
+            ax.text(k, marcar - 0.1, f"  {k} componente{'s' if k > 1 else ''} {'alcanzan' if k > 1 else 'alcanza'} el {marcar:.0%} ({acum[k - 1]:.0%})", color=ROJO)
     if len(r) <= 12:
         for x, v, a in zip(xs, r, acum):
             ax.text(x, v + 0.02, f"{v:.0%}", ha="center", fontsize=9)
     ax.set_xlabel("componente principal"); ax.set_ylabel("fracción de la varianza"); ax.set_ylim(0, 1.05)
     ax.set_xticks(xs if len(r) <= 20 else xs[::4]); ax.legend(loc="center right")
-    ax.set_title(titulo or "¿Cuánta información guarda cada componente?")
-    return _leyenda(fig, "las barras dicen cuánto de la variación total recoge cada componente; la línea, cuánto llevamos "
-                         "acumulado. Si los primeros dos acumulan mucho, el dibujo en 2D es fiel.")
+    ax.set_title(titulo or "¿Cuánta varianza guarda cada componente?")
+    return _leyenda(fig, leyenda or ("las barras dicen cuánto de la variación total recoge cada componente; la línea, cuánto llevamos "
+                                     "acumulado. Si los primeros dos acumulan mucho, el dibujo en 2D es fiel."))
 
 
 def biplot(scores, componentes, columnas, etiquetas=None, var_exp=None, escala=None, top=None):
@@ -1401,10 +1596,41 @@ def biplot(scores, componentes, columnas, etiquetas=None, var_exp=None, escala=N
     cols = list(columnas)
     if top:
         keep = np.argsort(-(W ** 2).sum(axis=1))[:top]; W = W[keep]; cols = [cols[i] for i in keep]
-    for (a, b), n in zip(W, cols):
-        ax.annotate("", xy=(a * escala, b * escala), xytext=(0, 0), arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=1.8))
-        ax.text(a * escala * 1.12, b * escala * 1.12, n, fontsize=9.5, ha="center", va="center",
-                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.8))
+    puntas = W * escala
+    # límites: todos los puntos y 1,25× la punta de cada flecha (los rótulos caben dentro de los ejes)
+    xs = np.r_[scores[:, 0], puntas[:, 0] * 1.25, 0]; ys = np.r_[scores[:, 1], puntas[:, 1] * 1.25, 0]
+    mx, my = 0.05 * np.ptp(xs), 0.05 * np.ptp(ys)
+    ax.set_xlim(xs.min() - mx, xs.max() + mx); ax.set_ylim(ys.min() - my, ys.max() + my)
+    for (a, b) in puntas:
+        ax.annotate("", xy=(a, b), xytext=(0, 0), annotation_clip=False,
+                    arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=1.8))
+    # rótulos: un poco más allá de la punta; si dos se pisan (flechas casi paralelas), se separan
+    pos = puntas * 1.06
+    (x0, x1), (y0, y1) = ax.get_xlim(), ax.get_ylim()
+    ancho_car = (x1 - x0) / (fig.get_figwidth() * 72) * 9.5 * 0.62      # ancho aproximado de un carácter en unidades de datos
+    alto = (y1 - y0) / (fig.get_figheight() * 72) * 9.5 * 1.9
+    for _ in range(200):
+        movido = False
+        for i in range(len(pos)):
+            for j in range(i + 1, len(pos)):
+                w = (len(cols[i]) + len(cols[j])) / 2 * ancho_car
+                dx, dy = pos[j] - pos[i]
+                if abs(dx) < w and abs(dy) < alto:
+                    paso = (alto - abs(dy)) / 2 + 1e-9
+                    signo = 1 if dy >= 0 else -1
+                    pos[j, 1] += signo * paso; pos[i, 1] -= signo * paso; movido = True
+        if not movido:
+            break
+    for (a, b), (px, py), n in zip(puntas, pos, cols):
+        if np.hypot(px - a * 1.06, py - b * 1.06) > alto * 0.3:      # el rótulo se movió: una guía hasta la punta
+            ax.plot([a, px], [b, py], color=GRIS, lw=0.7, ls=":", zorder=2)
+        # el rótulo crece hacia afuera de la flecha (no tapa la punta)
+        if abs(a) >= abs(b):
+            ha, va = ("left" if a >= 0 else "right"), "center"
+        else:
+            ha, va = "center", ("bottom" if b >= 0 else "top")
+        ax.text(px, py, n, fontsize=9.5, ha=ha, va=va, zorder=5, clip_on=False,
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85))
     ax.axhline(0, color=GRIS, lw=0.5); ax.axvline(0, color=GRIS, lw=0.5)
     v = var_exp if var_exp is not None else [None, None]
     ax.set_xlabel("PC1" + (f" ({v[0]:.0%} de la varianza)" if v[0] is not None else ""))
@@ -1418,14 +1644,14 @@ def pca_una_fila(fila_z, componente, columnas, nombre="PC1", real=None):
     """(D) Una fila entra a PCA: su valor en el componente = suma de (valor z × peso) de cada variable."""
     aportes = np.asarray(fila_z, float) * np.asarray(componente, float)
     fig, ax = plt.subplots(figsize=(10, 0.55 * len(columnas) + 1.6))
-    cols = [ROJO if a > 0 else AZUL for a in aportes]
+    cols = [NARANJA if a > 0 else GRIS for a in aportes]
     ax.barh(range(len(columnas)), aportes, color=cols)
     for i, (z, w, a) in enumerate(zip(fila_z, componente, aportes)):
-        ax.text(a, i, f"  z={z:+.2f} × peso {w:+.2f} = {a:+.2f}  ", va="center", ha="left" if a >= 0 else "right", fontsize=9)
+        ax.text(a, i, f"  ({z:+.2f}) × ({w:+.2f}) = {a:+.2f}  ", va="center", ha="left" if a >= 0 else "right", fontsize=9)
     ax.set_yticks(range(len(columnas))); ax.set_yticklabels(columnas); ax.invert_yaxis()
-    ax.axvline(0, color=NEGRO, lw=0.8); lim = max(1.0, np.abs(aportes).max() * 2.2); ax.set_xlim(-lim, lim)
+    ax.axvline(0, color=NEGRO, lw=0.8); lim = max(1.0, np.abs(aportes).max() * 2.4); ax.set_xlim(-lim, lim)
     ax.set_title(f"{nombre} de esta fila = {aportes.sum():+.2f}" + (f"   ({real})" if real else ""))
-    ax.set_xlabel(f"aporte a {nombre}")
+    ax.set_xlabel(f"aporte a {nombre} = (valor z de la variable) × (peso de la variable en {nombre})")
     return _leyenda(fig, "PCA no es una caja negra: cada componente es una suma ponderada de las variables (escaladas), "
                          "igual que la regresión de la Sesión 4, pero sin y: los pesos se eligen para esparcir los puntos.")
 
@@ -1474,15 +1700,16 @@ def tsne_perplexity(X, y, perplexities=(2, 5, 30, 100), semilla=0):
 
 
 def tsne_semillas(X, y, semillas=(0, 1, 2, 3), perplexity=30):
-    """t-SNE con distintas semillas: los grupos se mueven, rotan y cambian de vecino."""
+    """t-SNE con distintas semillas y arranque al azar (init='random'): los grupos se mueven, rotan y cambian de vecino.
+    Ojo: desde scikit-learn 1.2 el arranque por defecto es init='pca', con el que las semillas dan casi el mismo dibujo."""
     from sklearn.manifold import TSNE
     fig, axes = plt.subplots(1, len(semillas), figsize=(4.2 * len(semillas), 4.4))
     for ax, s in zip(axes, semillas):
         T = TSNE(2, perplexity=perplexity, random_state=s, init="random").fit_transform(X)
-        _dispersion_etiquetas(ax, T, y, f"semilla {s}", s=4)
+        _dispersion_etiquetas(ax, T, y, f"semilla {s} · init='random'", s=4)
     plt.tight_layout()
-    return _leyenda(fig, "en cada semilla el mismo dígito aparece en otro lugar y con otros vecinos. Qué grupos existen "
-                         "se repite; dónde quedan y qué tan lejos están unos de otros, no.")
+    return _leyenda(fig, "con init='random' (el arranque clásico) cada semilla da otro mapa. scikit-learn arranca por defecto desde PCA, "
+                         "lo que estabiliza el dibujo pero no lo vuelve verdadero: la perplexity sigue cambiándolo todo.")
 
 
 def tsne_ruido(n=500, perplexities=(2, 5, 50), semilla=0):
@@ -1524,22 +1751,23 @@ CIUDADES = {"BOGOTÁ, D.C.": "Bogotá", "MEDELLÍN": "Medellín", "CALI": "Cali"
             "QUIBDÓ": "Quibdó", "MITÚ": "Mitú", "RIOHACHA": "Riohacha", "PASTO": "Pasto"}
 
 
-def mapa_municipios(df, valor=None, etiquetas=None, titulo="", col_lat="latitud", col_lon="longitud", nombres=None):
+def mapa_municipios(df, valor=None, etiquetas=None, titulo="", col_lat="latitud", col_lon="longitud", nombres=None, leyenda=None):
     """Mapa de puntos: cada municipio en la coordenada de su cabecera, coloreado por un valor continuo
     (p. ej. el IPM) o por la etiqueta de su cluster."""
     d = df.dropna(subset=[col_lat, col_lon])
     fig, ax = plt.subplots(figsize=(7.2, 8.6))
     if etiquetas is not None:
-        lab = np.asarray(etiquetas)[df[col_lat].notna().values]
-        for k in sorted(set(lab)):
+        todas = np.asarray(etiquetas); lab = todas[df[col_lat].notna().values]
+        for k in sorted(set(todas)):
             m = lab == k
             n = nombres[k] if nombres else f"cluster {k}"
-            ax.scatter(d[col_lon][m], d[col_lat][m], s=13, color=COLORES_CLUSTER[int(k) % 8], label=f"{n} ({m.sum()})", edgecolor="white", lw=0.2)
+            # el conteo es sobre TODAS las filas (también las que no tienen coordenadas y no se dibujan)
+            ax.scatter(d[col_lon][m], d[col_lat][m], s=13, color=COLORES_CLUSTER[int(k) % 8], label=f"{n} ({(todas == k).sum()})", edgecolor="white", lw=0.2)
         ax.legend(loc="lower left", fontsize=8.5, framealpha=0.9)
     else:
         sc = ax.scatter(d[col_lon], d[col_lat], c=d[valor], s=13, cmap=LinearSegmentedColormap.from_list("ipm", ["#F6E7C8", NARANJA, "#7A2E0E"]),
                         edgecolor="white", lw=0.2)
-        plt.colorbar(sc, ax=ax, shrink=0.6, label=valor)
+        plt.colorbar(sc, ax=ax, shrink=0.6, label=f"{valor.upper() if valor == 'ipm' else valor} (%)")
     if "municipio" in d:
         for k, v in CIUDADES.items():
             f = d[d["municipio"] == k]
@@ -1547,11 +1775,17 @@ def mapa_municipios(df, valor=None, etiquetas=None, titulo="", col_lat="latitud"
                 ax.annotate(v, (f[col_lon].iloc[0], f[col_lat].iloc[0]), xytext=(5, 3), textcoords="offset points", fontsize=8.5,
                             fontweight="bold", bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7))
     ax.set_xlim(-79.6, -66.6); ax.set_ylim(-4.6, 12.9)
-    ax.text(-79.4, 12.6, "San Andrés y Providencia:\nfuera del recuadro", fontsize=7.5, color=GRIS, va="top")
+    sin_coord = int(df[col_lat].isna().sum())
+    ax.text(-79.4, 12.6, "San Andrés y Providencia:\nfuera del recuadro" + (f"\n{sin_coord} sin coordenadas: no se dibuja{'n' if sin_coord > 1 else ''}" if sin_coord else ""),
+            fontsize=7.5, color=GRIS, va="top")
     ax.set_aspect("equal"); ax.set_xlabel("longitud"); ax.set_ylabel("latitud")
     ax.set_title(titulo or (f"{valor} por municipio" if valor else "Clusters en el mapa"))
-    return _leyenda(fig, "cada punto es la cabecera de un municipio. El algoritmo NO vio las coordenadas: si los colores "
-                         "forman regiones, es una pista de que los grupos significan algo.")
+    if leyenda is None:
+        leyenda = ("cada punto es la cabecera de un municipio. El algoritmo NO vio las coordenadas: si los colores "
+                   "forman regiones, es una pista de que los grupos significan algo.") if etiquetas is not None else (
+                  "cada punto es la cabecera de un municipio; más oscuro = mayor porcentaje. Mire dónde se concentran los "
+                  "valores altos: el centro andino queda claro y la periferia, oscura.")
+    return _leyenda(fig, leyenda)
 
 
 def perfil_clusters(df, etiquetas, columnas, nombres=None, titulo="Perfil de cada cluster"):
@@ -1575,9 +1809,10 @@ def perfil_clusters(df, etiquetas, columnas, nombres=None, titulo="Perfil de cad
                          "Un perfil es un promedio: dentro de cada grupo hay municipios muy distintos.")
 
 
-def estabilidad_k(Z, ks=range(2, 8), repeticiones=20, fraccion=0.8, semilla=0):
-    """¿Los grupos sobreviven si cambio un poco los datos? Para cada k, se re-entrena K-means con el 80 %
-    de las filas y se compara con la solución completa (índice de Rand ajustado: 1 = idénticos, 0 = azar)."""
+def estabilidad_k(Z, ks=range(2, 8), repeticiones=20, fraccion=0.8, semilla=0, marcar=None):
+    """¿Los grupos sobreviven si cambio un poco los datos? Para cada k, se reentrena K-means con el 80 %
+    de las filas y se compara con la solución completa usando el índice de Rand ajustado (ARI: qué tanto
+    coinciden dos particiones en qué filas quedan juntas, corregido por el azar; 1 = idénticas, 0 = como al azar)."""
     from sklearn.cluster import KMeans
     from sklearn.metrics import adjusted_rand_score, silhouette_score
     rng = np.random.default_rng(semilla); Z = np.asarray(Z)
@@ -1588,16 +1823,66 @@ def estabilidad_k(Z, ks=range(2, 8), repeticiones=20, fraccion=0.8, semilla=0):
         for r in range(repeticiones):
             idx = rng.choice(len(Z), int(fraccion * len(Z)), replace=False)
             a.append(adjusted_rand_score(base.labels_, KMeans(k, n_init=10, random_state=r).fit(Z[idx]).predict(Z)))
-        res.append((k, np.mean(a), np.min(a), silhouette_score(Z, base.labels_)))
+        sil = silhouette_score(Z, base.labels_, sample_size=min(len(Z), 3000), random_state=0)
+        res.append((k, np.mean(a), np.min(a), sil))
     r = pd.DataFrame(res, columns=["k", "estabilidad", "peor", "silueta"])
     fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(r["k"], r["estabilidad"], "o-", color=NARANJA, lw=2.5, label="estabilidad (promedio de 20 re-muestreos)")
-    ax.fill_between(r["k"], r["peor"], r["estabilidad"], color=NARANJA, alpha=0.15, label="peor re-muestreo")
+    ax.plot(r["k"], r["estabilidad"], "o-", color=NARANJA, lw=2.5, label=f"estabilidad (ARI promedio de {repeticiones} remuestreos)")
+    ax.fill_between(r["k"], r["peor"], r["estabilidad"], color=NARANJA, alpha=0.15, label="hasta el peor remuestreo")
     ax.plot(r["k"], r["silueta"], "s--", color=NEGRO, label="silueta")
-    ax.set_xlabel("k"); ax.set_ylim(0, 1.05); ax.legend(loc="lower left", fontsize=9)
+    for _, f in r.iterrows():
+        ax.text(f["k"], f["estabilidad"] + 0.035, f"{f['estabilidad']:.2f}", ha="center", fontsize=8.5, color=NARANJA)
+        ax.text(f["k"], f["silueta"] + 0.035, f"{f['silueta']:.2f}", ha="center", fontsize=8.5, color=NEGRO)
+    if marcar is not None:
+        ax.axvline(marcar, color=ROJO, ls="--", lw=1.2)
+        ax.text(marcar, 0.5, f"  k elegido = {marcar}", color=ROJO, fontsize=9.5, fontweight="bold", va="center")
+    ax.set_xlabel("k"); ax.set_ylim(0, 1.1); ax.set_xticks(list(r["k"]))
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9, frameon=False)
     ax.set_title("¿Qué k da grupos que sobreviven a cambiar los datos?")
-    return _leyenda(fig, "estabilidad cerca de 1 = los mismos municipios quedan juntos aunque se quite el 20 % de los datos. "
-                         "Una silueta baja con estabilidad alta = grupos reales pero sin fronteras nítidas (un continuo con zonas).")
+    plt.tight_layout()
+    return _leyenda(fig, "estabilidad cerca de 1 = las mismas filas quedan juntas aunque se quite el 20 % de los datos. "
+                         "Una silueta baja con estabilidad alta = grupos que se repiten pero sin fronteras nítidas (un continuo con zonas).")
+
+
+def redundancia_huella(ipm, grupos_sin, grupos_con, cambios_semilla, cambios_con):
+    """💥 S9: ¿cómo se nota que el IPM 'votó dos veces'? Izquierda: cuántos municipios cambian de grupo con solo
+    cambiar la semilla (línea base) contra los que cambian al agregar el IPM. Derecha: el IPM de cada grupo, sin y
+    con el IPM entre las columnas (η² = fracción de la varianza del IPM que explican los grupos)."""
+    ipm = np.asarray(ipm, float); gs = np.asarray(grupos_sin); gc = np.asarray(grupos_con)
+
+    def eta2(g):
+        medias = pd.Series(ipm).groupby(g).transform("mean").values
+        return 1 - ((ipm - medias) ** 2).sum() / ((ipm - ipm.mean()) ** 2).sum()
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.6), gridspec_kw={"width_ratios": [1, 1.25]})
+    ax = axes[0]
+    cs = np.asarray(cambios_semilla)
+    jit = np.random.default_rng(0).uniform(-0.12, 0.12, len(cs))
+    ax.scatter(cs, jit, s=45, color=GRIS, alpha=0.8, edgecolor="white", label=f"solo otra semilla ({len(cs)} semillas)")
+    ax.axvline(cambios_con, color=ROJO, lw=2.2, label=f"agregar ipm e ipm_rural: {cambios_con}")
+    ax.set_ylim(-0.6, 0.6); ax.set_yticks([]); ax.spines["left"].set_visible(False)
+    ax.set_xlim(-5, max(cs.max(), cambios_con) * 1.15 + 5)
+    ax.set_xlabel("municipios que cambian de grupo (etiquetas emparejadas)")
+    ax.set_title(f"La semilla sola mueve de {cs.min()} a {cs.max()} municipios")
+    ax.legend(loc="upper center", fontsize=8.5, framealpha=0.95)
+    ax = axes[1]
+    ks = sorted(set(gs) | set(gc))
+    datos, pos, colores = [], [], []
+    for k in ks:
+        datos += [ipm[gs == k], ipm[gc == k]]; pos += [k - 0.18, k + 0.18]; colores += [GRIS, NARANJA]
+    b = ax.boxplot(datos, positions=pos, widths=0.32, vert=False, patch_artist=True, showfliers=False, whis=(0, 100))
+    for caja, c in zip(b["boxes"], colores):
+        caja.set_facecolor(c); caja.set_alpha(0.75)
+    for med in b["medians"]:
+        med.set_color(NEGRO)
+    ax.set_yticks(ks); ax.set_yticklabels([f"grupo {k}" for k in ks]); ax.invert_yaxis()
+    ax.set_xlabel("IPM del municipio (%) · las líneas van del mínimo al máximo de cada grupo")
+    ax.plot([], [], "s", color=GRIS, ms=9, label="15 privaciones"); ax.plot([], [], "s", color=NARANJA, ms=9, label="15 + ipm + ipm_rural")
+    ax.legend(loc="upper right", fontsize=8.5)
+    ax.set_title(f"η² del IPM sobre los grupos: {eta2(gs):.2f} → {eta2(gc):.2f}")
+    plt.tight_layout()
+    return _leyenda(fig, "el número de municipios que cambian no prueba nada: cambiar solo la semilla ya mueve tantos o más. "
+                         "La huella de la redundancia está a la derecha: con el IPM adentro, los grupos se ordenan más por nivel "
+                         "(η² sube y las cajas de IPM se traslapan menos).")
 
 
 # ================================================================== M4 · S10 — validación cruzada
@@ -1611,12 +1896,15 @@ def loteria_split(paneles, titulo="La lotería del split: el mismo modelo, 30 pa
     for ax, (n, sc) in zip(axes, paneles.items()):
         sc = np.asarray(sc)
         ax.hist(sc, bins=np.linspace(0.4, 0.85, 31), color=MORADO, alpha=0.85, edgecolor="white")
-        ax.axvline(sc.min(), color=ROJO, ls="--"); ax.axvline(sc.max(), color=ROJO, ls="--")
+        ax.axvline(sc.min(), color=ROJO, ls="--", label="la peor y la mejor partición")
+        ax.axvline(sc.max(), color=ROJO, ls="--")
         ax.set_title(f"{n}\nAUC de {sc.min():.3f} a {sc.max():.3f}", fontsize=10.5)
         ax.set_xlabel("AUC en prueba"); ax.set_ylabel("particiones")
+    axes[0].legend(loc="upper left", fontsize=8.5)
     fig.suptitle(titulo, fontsize=11.5, y=1.02); plt.tight_layout()
     return _leyenda(fig, "cada barra cuenta particiones (random_state) distintas del mismo dataset. Con muchos datos la "
-                         "lotería casi no importa; con pocos, un solo split puede decir 0,45 o 0,65 del MISMO modelo.")
+                         "lotería casi no importa; con pocos, un solo split puede decir 0,45 o 0,65 del MISMO modelo. Las líneas rojas "
+                         "marcan la peor y la mejor de las 30.")
 
 
 def cv_folds(k=5, con_prueba=True):
@@ -1647,14 +1935,13 @@ def cv_scores(resultados, titulo="Score de cada fold y promedio", metrica="AUC")
     fig, ax = plt.subplots(figsize=(1.9 * len(resultados) + 3.5, 4.2))
     for i, (n, sc) in enumerate(resultados.items()):
         sc = np.asarray(sc); c = COLORES_CLUSTER[i % 8]
-        ax.bar(i, sc.mean(), color=c, alpha=0.25, width=0.6)
-        ax.errorbar(i, sc.mean(), yerr=sc.std(), color=c, capsize=8, lw=2)
+        ax.errorbar(i + 0.28, sc.mean(), yerr=sc.std(), color=c, capsize=8, lw=2, marker="D", ms=8, mfc="white", mew=2)
         ax.scatter(np.full(len(sc), i) + np.linspace(-0.15, 0.15, len(sc)), sc, color=c, s=28, zorder=3)
         ax.text(i, max(sc.max(), sc.mean() + sc.std()) + 0.006, f"{sc.mean():.3f} ± {sc.std():.3f}", ha="center", fontsize=9.5, fontweight="bold")
     ax.set_xticks(range(len(resultados))); ax.set_xticklabels(list(resultados)); ax.set_ylabel(metrica)
     lo = min(np.min(v) for v in resultados.values()); hi = max(np.max(v) for v in resultados.values())
-    ax.set_ylim(lo - 0.03, hi + 0.03); ax.set_title(titulo)
-    return _leyenda(fig, "cada punto es un fold. Si las diferencias entre modelos son mucho más grandes que la dispersión "
+    ax.set_ylim(lo - 0.03, hi + 0.03); ax.set_title(titulo); ax.set_xlim(-0.6, len(resultados) - 0.2)
+    return _leyenda(fig, "cada punto es un fold; el rombo con sus bigotes, el promedio ± desviación (el eje no empieza en 0). Si las diferencias entre modelos son mucho más grandes que la dispersión "
                          "de sus puntos, la diferencia es real; si se traslapan, no se puede decir cuál es mejor.")
 
 
@@ -1698,7 +1985,8 @@ def duplicados_fuga(n=12, semilla=3):
             ax.axvline(corte + 0.37, color=NEGRO, lw=2, ls="--")
             rep = sorted({i for i in orden[corte:] if i in si and i in orden[:corte]})
             if rep:
-                ax.text(len(orden) + 1.0, 0.4, f"← el cliente {', '.join(map(str, rep))} está a los dos lados", va="center", fontsize=9.5, color=ROJO)
+                quien = (f"los clientes {', '.join(map(str, rep[:-1]))} y {rep[-1]} están" if len(rep) > 1 else f"el cliente {rep[0]} está")
+                ax.text(len(orden) + 1.0, 0.4, f"← {quien}\n   a los dos lados", va="center", fontsize=9.5, color=ROJO)
         ax.set_xlim(-0.3, len(orden) + 9); ax.set_ylim(-0.2, 1.1); ax.axis("off"); ax.set_title(t, fontsize=10.5, loc="left")
     plt.tight_layout()
     return _leyenda(fig, "si se duplican filas antes de partir, copias del MISMO cliente quedan en entrenamiento y en "
@@ -1759,8 +2047,9 @@ def boosting_curva(modelo):
     ax.axvline(mejor, color=ROJO, ls=":", lw=1.5); ax.text(mejor, va.max(), f"  mejor: árbol {mejor}", color=ROJO, va="top")
     ax.set_xlabel("número de árboles"); ax.set_ylabel("log-loss (menor es mejor)"); ax.legend()
     ax.set_title(f"Parada temprana: se detuvo en {len(tr) - 1} árboles")
-    return _leyenda(fig, "la pérdida de entrenamiento baja siempre; la de validación baja, se aplana y empieza a subir (sobreajuste, "
-                         "Sesión 3). early_stopping corta ahí solo: el número de árboles deja de ser una perilla que hay que buscar.")
+    return _leyenda(fig, "la pérdida de entrenamiento baja siempre; la de validación baja y se aplana. Cuando pasan 10 árboles "
+                         "seguidos sin mejorar (n_iter_no_change=10), early_stopping para solo: el número de árboles deja de ser "
+                         "una perilla que hay que buscar.")
 
 
 def grid_heatmap(cv_results, p1, p2, metrica="AUC"):
@@ -1769,18 +2058,22 @@ def grid_heatmap(cv_results, p1, p2, metrica="AUC"):
     t = r.pivot_table(index=f"param_{p1}", columns=f"param_{p2}", values="mean_test_score")
     fig, ax = plt.subplots(figsize=(1.4 * t.shape[1] + 3.2, 0.75 * t.shape[0] + 1.8))
     im = ax.imshow(t.values, cmap=LinearSegmentedColormap.from_list("g", ["white", MORADO]), aspect="auto")
-    mx = t.values.max()
+    mx = t.values.max(); im_, jm_ = np.unravel_index(np.argmax(t.values), t.shape)
+    cerca = int((t.values >= mx - 0.005).sum())
     for i in range(t.shape[0]):
         for j in range(t.shape[1]):
             v = t.values[i, j]
-            ax.text(j, i, f"{v:.3f}", ha="center", va="center", fontsize=11, fontweight="bold" if v == mx else "normal",
+            ax.text(j, i, f"{v:.3f}", ha="center", va="center", fontsize=11, fontweight="bold" if (i, j) == (im_, jm_) else "normal",
                     color="white" if v > t.values.min() + 0.7 * (mx - t.values.min()) else NEGRO)
+    ax.add_patch(plt.Rectangle((jm_ - 0.48, im_ - 0.48), 0.96, 0.96, fill=False, ec=ROJO, lw=3, zorder=3))
+    ax.text(jm_, im_ + 0.33, "mejor", ha="center", va="center", fontsize=8.5, color="white", fontweight="bold")
     ax.set_xticks(range(t.shape[1])); ax.set_xticklabels(t.columns); ax.set_xlabel(p2)
     ax.set_yticks(range(t.shape[0])); ax.set_yticklabels(t.index); ax.set_ylabel(p1)
     plt.colorbar(im, ax=ax, shrink=0.8, label=f"{metrica} (validación cruzada)")
-    ax.set_title(f"GridSearchCV: {t.size} combinaciones × folds")
-    return _leyenda(fig, "cada casilla es el promedio de la validación cruzada de una combinación. Note cuántas casillas quedan a "
-                         "menos de 0,005 de la mejor: muchas configuraciones son prácticamente igual de buenas.")
+    ax.set_title(f"GridSearchCV: {t.size} combinaciones × 5 folds = {5 * t.size} entrenamientos")
+    return _leyenda(fig, f"cada casilla es el promedio de la validación cruzada de una combinación; el recuadro rojo, la mejor "
+                         f"(con más decimales: {mx:.4f}). {cerca} de las {t.size} casillas quedan a menos de 0,005 de ella: muchas "
+                         "configuraciones son prácticamente igual de buenas.")
 
 
 def grid_vs_random(n=9, semilla=0):
@@ -1814,6 +2107,8 @@ def optuna_historia(valores, importancias=None, titulo="Optuna: cada intento apr
     ax.scatter(np.arange(len(v)), v, color=MORADO, alpha=0.6, s=30, label="cada intento")
     ax.step(np.arange(len(v)), mejor, where="post", color=ROJO, lw=2.5, label="mejor hasta ahí")
     ax.set_xlabel("intento"); ax.set_ylabel("AUC (validación cruzada)"); ax.legend(loc="lower right"); ax.set_title(titulo, fontsize=10.5)
+    from matplotlib.ticker import MaxNLocator
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     lo = np.percentile(v, 10); ax.set_ylim(lo - 0.01, v.max() + 0.006)
     if importancias:
         s = pd.Series(importancias).sort_values()
@@ -1823,23 +2118,29 @@ def optuna_historia(valores, importancias=None, titulo="Optuna: cada intento apr
                          "La línea roja sube rápido al principio y luego casi se aplana: la mayor parte de la ganancia llega pronto.")
 
 
-def ganador_busqueda(cv, test, i_mejor, defecto=None):
-    """💥 Maldición del ganador: cada punto es una configuración de la búsqueda (CV vs prueba). La ganadora en CV
-    no es la ganadora en la prueba, y su ventaja era en parte suerte."""
+def ganador_busqueda(cv, test, i_mejor, defecto=None, n_clientes=None, n_nuevos=None):
+    """💥 Maldición del ganador: cada punto es una configuración de la búsqueda (CV vs datos nuevos). Separa dos caídas:
+    la de toda la nube (lotería de una muestra pequeña) y la de MÁS de la ganadora (selección)."""
     cv = np.asarray(cv); test = np.asarray(test)
+    caida = np.median(cv - test)
     fig, ax = plt.subplots(figsize=(8.5, 5.8))
     ax.scatter(cv, test, s=34, color=MORADO, alpha=0.55, label="cada configuración probada")
     ax.scatter(cv[i_mejor], test[i_mejor], s=170, marker="*", color=ROJO, edgecolor=NEGRO, zorder=4, label="la 'ganadora' de la búsqueda")
     if defecto is not None:
         ax.scatter(*defecto, s=110, marker="s", color=GRIS, edgecolor=NEGRO, zorder=4, label="valores por defecto (sin buscar)")
     lo = min(cv.min(), test.min()) - 0.01; hi = max(cv.max(), test.max()) + 0.01
-    ax.plot([lo, hi], [lo, hi], color=GRIS, ls=":", lw=1); ax.text(hi, hi, " CV = prueba", fontsize=8.5, color=GRIS, va="bottom", ha="right")
+    ax.plot([lo, hi], [lo, hi], color=GRIS, ls=":", lw=1); ax.text(lo + 0.003, lo + 0.006, "CV = datos nuevos", fontsize=8.5, color=GRIS, va="bottom", ha="left", rotation=33)
+    ax.plot([lo, hi], [lo - caida, hi - caida], color=MORADO, ls="--", lw=1, alpha=0.6, label=f"caída típica de todas ({caida:.3f})")
+    ax.set_xlim(lo, hi); ax.set_ylim(lo - caida - 0.005, hi)
     puesto = int((test > test[i_mejor]).sum()) + 1
-    ax.set_xlabel("AUC en validación cruzada (lo que vio la búsqueda)"); ax.set_ylabel("AUC en prueba (datos nuevos)")
-    ax.set_title(f"La ganadora en validación queda en el puesto {puesto} de {len(cv)} en la prueba")
+    cuantos = f" ({n_clientes:,} clientes)".replace(",", " ") if n_clientes else ""
+    nuevos = f" ({n_nuevos:,} clientes nuevos)".replace(",", " ") if n_nuevos else ""
+    ax.set_xlabel(f"AUC en validación cruzada{cuantos}: lo que vio la búsqueda"); ax.set_ylabel(f"AUC en datos nuevos{nuevos}")
+    ax.set_title(f"La ganadora en validación queda en el puesto {puesto} de {len(cv)} en datos nuevos")
     ax.legend(loc="upper left", fontsize=8.5)
-    return _leyenda(fig, "casi todos los puntos están por debajo de la diagonal y la nube es ancha: con pocos datos, las diferencias "
-                         "entre configuraciones son del tamaño del ruido. El mejor de 60 sorteos siempre sale optimista.")
+    return _leyenda(fig, f"casi toda la nube cae bajo la diagonal, hasta la línea punteada morada (caída típica {caida:.3f}): eso es la "
+                         "lotería de una muestra pequeña (S10) y le pasa a todas, también a la configuración por defecto. Lo propio de la "
+                         f"ganadora es caer MÁS ({cv[i_mejor] - test[i_mejor]:.3f}) y perder el primer puesto: la maldición del ganador.")
 
 
 def comparacion_final(filas, metrica="AUC"):
@@ -1847,14 +2148,17 @@ def comparacion_final(filas, metrica="AUC"):
     fig, ax = plt.subplots(figsize=(1.8 * len(filas) + 3.5, 4.3))
     xs = np.arange(len(filas))
     cvm = [v[0] for v in filas.values()]; cvs = [v[1] for v in filas.values()]; te = [v[2] for v in filas.values()]
-    ax.bar(xs - 0.18, cvm, 0.36, yerr=cvs, capsize=5, color=MORADO, label="validación cruzada (± desv.)")
-    ax.bar(xs + 0.18, te, 0.36, color=GRIS, label="prueba (una sola vez)")
+    ax.errorbar(xs - 0.12, cvm, yerr=cvs, fmt="o", ms=9, capsize=6, lw=2, color=MORADO, label="validación cruzada (± desv.)")
+    ax.plot(xs + 0.12, te, "s", ms=9, color=GRIS, mec=NEGRO, label="prueba (una sola vez)")
+    ax.plot(xs - 0.12, cvm, color=MORADO, lw=1, alpha=0.4)
     for x, a, b in zip(xs, cvm, te):
-        ax.text(x - 0.18, a + 0.012, f"{a:.3f}", ha="center", fontsize=9); ax.text(x + 0.18, b + 0.012, f"{b:.3f}", ha="center", fontsize=9)
-    ax.set_xticks(xs); ax.set_xticklabels(list(filas), fontsize=9.5); ax.set_ylim(0.45, max(cvm + te) + 0.06); ax.set_ylabel(metrica)
+        ax.text(x - 0.24, a, f"{a:.3f}", ha="right", va="center", fontsize=9, color=MORADO)
+        ax.text(x + 0.22, b, f"{b:.3f}", ha="left", va="center", fontsize=9, color=NEGRO)
+    ax.set_xticks(xs); ax.set_xticklabels(list(filas), fontsize=9.5); ax.set_ylim(0.45, max(cvm + te) + 0.05); ax.set_ylabel(metrica)
+    ax.set_xlim(-0.6, len(filas) - 0.4)
     ax.legend(loc="upper left", fontsize=9); ax.set_title("Comparación honesta: de la línea base al modelo afinado")
-    return _leyenda(fig, "lea los saltos de izquierda a derecha: casi toda la ganancia viene de elegir un buen modelo; afinar "
-                         "hiperparámetros suma poco. Si validación y prueba coinciden, el número es confiable.")
+    return _leyenda(fig, "casi toda la ganancia viene de elegir un buen tipo de modelo; boosting frente a bosque es una mejora "
+                         "pequeña pero consistente fold a fold; afinar con Optuna cabe en el ruido. (El eje empieza en 0,45.)")
 
 
 def shap_una_fila(valores, base, fila, columnas, real=None, top=8):
@@ -1870,15 +2174,16 @@ def shap_una_fila(valores, base, fila, columnas, real=None, top=8):
         ax.text(acum + c, i, f" {c:+.2f}", va="center", fontsize=8.5, ha="left" if c >= 0 else "right"); acum += c
     ax.axvline(base, color=GRIS, ls=":"); ax.axvline(acum, color=NEGRO, lw=1.2)
     ax.set_yticks(range(len(pasos))); ax.set_yticklabels([p[0][:38] for p in pasos], fontsize=8.5); ax.invert_yaxis()
-    ax.set_xlabel("log-odds de 'sí'"); ax.set_title(f"Desde el promedio ({base:.2f}) hasta esta predicción ({acum:.2f})")
+    ax.set_xlabel("log-odds de 'sí'"); ax.set_title(f"Desde el punto de partida ({base:.2f}) hasta esta predicción ({acum:.2f})")
     zz = np.linspace(-6, 3, 200); s = 1 / (1 + np.exp(-zz)); p = 1 / (1 + np.exp(-acum)); p0 = 1 / (1 + np.exp(-base))
     ax2 = axes[1]; ax2.plot(zz, s, color=MORADO, lw=2.2)
     ax2.plot(base, p0, "o", color=GRIS, ms=8); ax2.plot(acum, p, "o", color=ROJO, ms=10)
-    ax2.set_title(f"probabilidad: {p0:.0%} (promedio) → {p:.0%}" + (f"\n(lo que pasó: {'sí' if real == 1 else 'no'})" if real is not None else ""), fontsize=10)
+    ax2.set_title(f"probabilidad: {p0:.0%} (punto de partida) → {p:.0%}" + (f"\n(lo que pasó: {'sí' if real == 1 else 'no'})" if real is not None else ""), fontsize=10)
     ax2.set_xlabel("log-odds"); ax2.set_ylabel("probabilidad de 'sí'")
     plt.tight_layout()
-    return _leyenda(fig, "SHAP reparte la predicción entre las variables: rojo empuja hacia 'sí', azul hacia 'no', y la suma lleva "
-                         "del promedio de todos los clientes a la predicción de este. Es la 'una fila' de la logística (S5), para cualquier modelo.")
+    return _leyenda(fig, f"SHAP reparte la predicción entre las variables: rojo empuja hacia 'sí', azul hacia 'no'. La suma parte del "
+                         f"log-odds promedio del modelo (≈ {1 / (1 + np.exp(-base)):.0%} al pasarlo por la sigmoide; no es el 11,7 % de 'sí' de los datos) "
+                         "y llega a la predicción de este cliente. Es la 'una fila' de la logística (S5), para cualquier modelo.")
 
 
 def shap_global(valores, columnas, top=12):
@@ -1943,15 +2248,15 @@ def mapa_del_curso():
 TRAMPAS_CURSO = [
     # (sesión, familia, trampa, lo que prometía, lo que era)
     ("S2", "datos", "El año como predictor", "accuracy 0,831", "la base dejó de registrar 'solo daños' en oct-2022"),
-    ("S3", "fuga", "Target encoding con todas las filas", "+4,7 puntos, train = prueba", "prueba 0,744: peor que sin la variable"),
+    ("S3", "fuga", "Target encoding con todas las filas", "+4,7 puntos", "prueba 0,744: peor que sin la variable"),
     ("S4", "fuga", "La y hecha de las X", "R² = 1,000", "redescubrió la fórmula del ICFES; lo honesto: 0,18"),
     ("S5", "métrica", "Accuracy sin línea base", "accuracy 0,894", "la línea base que nunca dice 'sí': 0,883"),
     ("S6", "fuga", "duration: consecuencia de la y", "AUC 0,93", "sin ella, el bosque: ~0,80"),
     ("S7", "analista", "Agrupar sin escalar", "68 % de pureza", "agrupó por gramos; escalado: 92 %"),
     ("S8", "analista", "Creerle al t-SNE", "10 islas perfectas", "tamaños y distancias son artefactos"),
-    ("S9", "analista", "IPM junto a sus partes", "'más información'", "75 municipios cambian de grupo"),
+    ("S9", "analista", "IPM junto a sus partes", "'más información'", "grupos ordenados por nivel (η² IPM 0,79 → 0,83)"),
     ("S10", "fuga", "Duplicar antes de validar", "CV: AUC 0,96", "prueba: 0,80"),
-    ("S11", "métrica", "Creerle al best_score_", "CV: 0,770", "prueba: 0,706 (puesto 15 de 60)"),
+    ("S11", "métrica", "Creerle al best_score_", "CV: 0,770", "datos nuevos: 0,714 (puesto 32 de 60)"),
 ]
 FAMILIAS_TRAMPA = {"fuga": ("fuga de información", ROJO), "métrica": ("métrica mal leída", MODULO[4]),
                    "datos": ("el dato cambió", MODULO[1]), "analista": ("decisión del analista sin y", MODULO[3])}
@@ -1981,14 +2286,15 @@ def trampas_del_curso():
                          "fugas, métricas mal leídas, datos que cambian y decisiones del analista que ninguna y delata.")
 
 
-def plan_presentaciones(n, total=120, apertura=10, pausa=5, cierre=15):
-    """Reparte el tiempo de S12 entre n presentaciones. Devuelve un dict con los minutos de cada parte."""
+def plan_presentaciones(n, total=120, apertura=10, pausa=5, cierre=15, colchon_min=3):
+    """Reparte el tiempo de S12 entre n presentaciones. Devuelve un dict con los minutos de cada parte.
+    Siempre reserva al menos `colchon_min` minutos de colchón: los cambios de pantalla casi nunca duran lo previsto."""
     disponible = total - apertura - pausa - cierre
-    turno = float(np.floor(2 * disponible / n) / 2)
+    turno = float(np.floor(2 * (disponible - colchon_min) / n) / 2)
     if turno < 5:                        # muchos: sin pausa y cierre corto, antes que recortar las charlas
         pausa, cierre = 0, 10
         disponible = total - apertura - pausa - cierre
-        turno = float(np.floor(2 * disponible / n) / 2)
+        turno = float(np.floor(2 * (disponible - colchon_min) / n) / 2)
     preguntas = 1.5 if turno >= 6 else 1.0
     cambio = 0.5
     charla = min(turno - preguntas - cambio, 6.0)
@@ -2108,8 +2414,7 @@ def gini_pelotas(casos=((10, 0), (8, 2), (5, 5))):
         ax.text(x + 5, 4.95, f"p(azul) = {na}/{n} = {p0:.1f}".replace(".", ","), ha="center", fontsize=10.5, color=AZUL)
         ax.text(x + 5, 3.95, f"G = 1 − {p1:.1f}² − {p0:.1f}²".replace(".", ","), ha="center", fontsize=11.5, color=NEGRO)
         ax.text(x + 5, 3.05, f"= 1 − {p1**2:.2f} − {p0**2:.2f}".replace(".", ","), ha="center", fontsize=11.5, color=NEGRO)
-        col = AZUL if g < 0.1 else (ROJO if g >= 0.45 else "#D97C1F")
-        ax.text(x + 5, 1.55, f"G = {g:.2f}".replace(".", ","), ha="center", fontsize=19, fontweight="bold", color=col)
+        ax.text(x + 5, 1.55, f"G = {g:.2f}".replace(".", ","), ha="center", fontsize=19, fontweight="bold", color=NEGRO)
         ax.text(x + 5, 0.45, etiquetas[k] if k < 3 else "", ha="center", fontsize=10, color=GRIS, style="italic")
     ax.set_title("Impureza de Gini: qué tan revuelta está una caja", fontsize=13)
     return _leyenda(fig, "G = 0 cuando todas las pelotas son del mismo color (caja pura); con dos colores, el máximo es "
@@ -2135,14 +2440,13 @@ def gini_dos_cortes():
             _caja_pelotas(ax, x, 6.3, 8.4, 4.4, rr, aa, cols=5)
             ax.text(x + 4.2, 5.5, f"{rr} rojas · {aa} azules", ha="center", fontsize=10, color=NEGRO)
             ax.text(x + 4.2, 4.5, f"G = {gg:.2f}".replace(".", ","), ha="center", fontsize=12, fontweight="bold",
-                    color=AZUL if gg < 0.1 else NEGRO)
+                    color=NEGRO)
         ax.text(x0 + 9, 2.9, f"ponderado = {n1}/10·{g1:.2f} + {n2}/10·{g2:.2f}".replace(".", ","), ha="center", fontsize=11.5, color=NEGRO)
-        ax.text(x0 + 9, 1.4, f"= {gp:.2f}".replace(".", ","), ha="center", fontsize=20, fontweight="bold",
-                color=AZUL if gp == min(resumen) and len(resumen) == 1 else NEGRO)
+        ax.text(x0 + 9, 1.4, f"= {gp:.2f}".replace(".", ","), ha="center", fontsize=20, fontweight="bold", color=NEGRO)
     gana = int(np.argmin(resumen))
     ax.add_patch(FancyBboxPatch((1 + 20 * gana - 0.4, 0.4), 18.8, 12.3, boxstyle="round,pad=0,rounding_size=0.4",
-                                fc="none", ec=AZUL, lw=2.4, zorder=0))
-    ax.text(1 + 20 * gana + 18.2, 0.8, "gana", ha="right", fontsize=12, color=AZUL, fontweight="bold")
+                                fc="none", ec="#E8B500", lw=2.6, zorder=0))
+    ax.text(1 + 20 * gana + 18.2, 0.8, "gana", ha="right", fontsize=12, color="#B08900", fontweight="bold")
     return _leyenda(fig, "Cada lado se pesa por cuántos casos tiene. La pregunta A deja un lado puro (G = 0) y baja el "
                          "promedio a 0,27; la B no separa nada (0,48 = igual que antes). El árbol se queda con A.")
 
@@ -2151,7 +2455,7 @@ def arbol_mini_datos():
     """(A) Los 10 incidentes de las pelotas, en una tabla y en el plano, y TODOS los cortes posibles de 'hora'
     con su Gini ponderado: el árbol prueba cada uno y se queda con el más bajo."""
     hora = np.array([1, 2, 3, 5, 7, 10, 13, 17, 19, 22])
-    vel = np.array([75, 40, 62, 85, 45, 70, 35, 55, 80, 48])
+    vel = np.array([71, 42, 86, 32, 38, 56, 63, 49, 46, 78])
     y = np.array([1, 1, 1, 1, 0, 1, 0, 0, 1, 0])
     fig = plt.figure(figsize=(13, 5.4))
     gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.25, 1.35], wspace=0.35)
@@ -2178,28 +2482,41 @@ def arbol_mini_datos():
         gps.append((len(izq) * _gini(izq.sum(), len(izq)) + len(der) * _gini(der.sum(), len(der))) / len(y))
     gps = np.array(gps); k = gps.argmin()
     barras = axg.bar(range(len(umbrales)), gps, color=["#D0D7E2"] * len(gps))
-    barras[k].set_color(AZUL)
+    barras[k].set_color("#E8B500")
     for i, g in enumerate(gps):
-        axg.text(i, g + 0.008, f"{g:.2f}".replace(".", ","), ha="center", fontsize=8.5, color=NEGRO if i != k else AZUL,
+        axg.text(i, g + 0.008, f"{g:.2f}".replace(".", ","), ha="center", fontsize=8.5, color=NEGRO,
                  fontweight="bold" if i == k else "normal")
-    axg.set_xticks(range(len(umbrales))); axg.set_xticklabels([f"≤{u:g}" for u in umbrales], fontsize=8.5, rotation=45)
+    axg.set_xticks(range(len(umbrales))); axg.set_xticklabels([f"≤{u:g}".replace(".", ",") for u in umbrales], fontsize=8.5, rotation=45)
     axg.axhline(0.48, color=GRIS, ls=":", lw=1); axg.text(-0.5, 0.515, "línea punteada = sin cortar (0,48)", ha="left", fontsize=8.5, color=GRIS)
     axg.set_ylim(0, 0.55); axg.set_ylabel("Gini ponderado"); axg.set_xlabel("corte probado en 'hora'")
     axg.set_title(f"Los {len(umbrales)} cortes posibles en 'hora'", fontsize=12)
-    return _leyenda(fig, "Entre cada par de horas vecinas hay un corte posible. El árbol los calcula todos (y los de "
-                         f"velocidad) y elige el más bajo: hora ≤ {umbrales[k]:g}, Gini {gps[k]:.2f}".replace("0.", "0,") + ".")
+    ov = np.sort(vel); uv = (ov[:-1] + ov[1:]) / 2
+    gv = min((len(y[vel <= u]) * _gini(y[vel <= u].sum(), len(y[vel <= u])) +
+              len(y[vel > u]) * _gini(y[vel > u].sum(), len(y[vel > u]))) / len(y) for u in uv)
+    return _leyenda(fig, "Entre cada par de horas vecinas hay un corte posible. El árbol los calcula todos (y los 9 de "
+                         f"velocidad, cuyo mejor corte apenas llega a {_mil(gv, 2)}) y elige el más bajo de todos: "
+                         f"hora ≤ {_texto_es(f'{umbrales[k]:g}')}, Gini {_mil(gps[k], 2)}.")
 
 
 def _texto_pregunta(nombre, umbral, dummies=True):
     """Convierte 'clase_Choque <= 0.5' en '¿Es Choque?' y 'hora_num <= 7.5' en '¿hora ≤ 7?'.
     Devuelve (texto, invertido): invertido=True si el lado '≤' significa 'no'."""
-    if dummies and "_" in nombre and abs(umbral - 0.5) < 1e-9:
+    nombres = {"hora_num": "hora", "anio": "año", "dia_semana": "día (0 = lunes)", "mes": "mes"}
+    if dummies and "_" in nombre and nombre not in nombres and abs(umbral - 0.5) < 1e-9:
         var, val = nombre.split("_", 1)
         return f"¿{var} = {val}?", True
-    nombres = {"hora_num": "hora", "anio": "año", "dia_semana": "día (0 = lunes)", "mes": "mes"}
     v = nombres.get(nombre, nombre)
-    u = int(np.floor(umbral)) if abs(umbral - round(umbral) - 0.5) < 1e-9 else round(umbral, 1)
+    u = int(np.floor(umbral)) if abs(umbral - np.floor(umbral) - 0.5) < 1e-6 else round(float(umbral), 1)
     return f"¿{v} ≤ {u}?", False
+
+
+def _pct(x):
+    """Porcentaje para rótulos: '<1 %' y '>99 %' en vez de redondear a 0 o 100 cuando no lo es."""
+    if 0 < x < 0.005:
+        return "<1 %"
+    if 0.995 <= x < 1:
+        return ">99 %"
+    return f"{x:.0%}".replace("%", " %")
 
 
 def arbol_reglas(modelo, nombres, max_depth=2, class_names=("solo daños", "con víctimas"), figsize=(13, 5.0), fila=None):
@@ -2228,7 +2545,7 @@ def arbol_reglas(modelo, nombres, max_depth=2, class_names=("solo daños", "con 
     n_hojas = hojas[0]
     fig, ax = plt.subplots(figsize=figsize); ax.axis("off")
     ax.set_xlim(-0.6, n_hojas - 0.4); ax.set_ylim(-max_depth - 0.32, 0.4)
-    W, H = 0.86, 0.5
+    W, H = 0.95, 0.5
     def caja(nodo):
         x, prof = pos[nodo]; yv = -prof
         n = t.n_node_samples[nodo]; p1 = valores[nodo, 1]
@@ -2249,8 +2566,8 @@ def arbol_reglas(modelo, nombres, max_depth=2, class_names=("solo daños", "con 
         bx, by, bw, bh = x - W / 2 + 0.06, yv - 0.15, W - 0.12, 0.07
         ax.add_patch(plt.Rectangle((bx, by), bw * (1 - p1), bh, color=AZUL, zorder=3))
         ax.add_patch(plt.Rectangle((bx + bw * (1 - p1), by), bw * p1, bh, color=ROJO, zorder=3))
-        ax.text(x, yv - 0.035, f"{n / total:.0%} de los casos · {p1:.0%} graves".replace("%", " %"), ha="center",
-                va="center", fontsize=8.6, color="#555555", zorder=3)
+        ax.text(x, yv - 0.035, f"{_pct(n / total)} de los casos · {_pct(p1)} con víctimas", ha="center",
+                va="center", fontsize=7.6, color="#555555", zorder=3)
         if not hoja:
             txt, inv = _texto_pregunta(nombres[t.feature[nodo]], t.threshold[nodo])
             si, no = (t.children_right[nodo], t.children_left[nodo]) if inv else (t.children_left[nodo], t.children_right[nodo])
@@ -2408,8 +2725,8 @@ def tres_hipotesis(mes_corte=30, n=48):
         for s in ("top", "right"): ax.spines[s].set_visible(False)
     axes[0].set_ylabel("incidentes por mes"); axes[0].legend(loc="upper left", fontsize=8.5)
     plt.tight_layout()
-    return _leyenda(fig, "cada hipótesis deja una huella distinta. Fíjese en el ROJO después del corte: ¿sube, sigue igual "
-                         "o no pasa nada? Con eso en la cabeza, mire ahora la serie real.")
+    return _leyenda(fig, "cada hipótesis deja una huella distinta después del corte: en (a) el ROJO sube; en (b) el rojo "
+                         "sigue igual y el AZUL desaparece; en (c) no cambia nada. Con eso en la cabeza, mire ahora la serie real.")
 
 
 def imputar_y_marcar(valores=(6.25, None, 6.21, None, 6.30, 6.18)):
@@ -2430,7 +2747,7 @@ def imputar_y_marcar(valores=(6.25, None, 6.21, None, 6.30, 6.18)):
                 vacio = isinstance(val, float) and np.isnan(val)
                 fc = "#FBECEA" if (vacio or (j > 0 and fila[0] == "x")) else ("#F7F8FA" if i % 2 else "white")
                 ax.add_patch(plt.Rectangle((xs[j], yy), anchos[j], 0.9, fc=fc, ec="white", lw=2))
-                texto = "NaN" if vacio else (f"{val:.2f}" if isinstance(val, float) else str(val))
+                texto = "NaN" if vacio else (_mil(val, 2) if isinstance(val, float) else str(val))
                 ax.text(xs[j] + anchos[j] / 2, yy + 0.45, texto, ha="center", va="center", fontsize=10.5,
                         color=ROJO if vacio else NEGRO, fontweight="bold" if vacio else "normal")
     antes = [[x] for x in v]
@@ -2449,17 +2766,18 @@ def imputar_y_marcar(valores=(6.25, None, 6.21, None, 6.30, 6.18)):
             yy = 6.6 - (i + 1) * 0.9
             ax.add_patch(plt.Rectangle((xs_d, yy), 4.0, 0.9, fc="none", ec=ROJO, lw=2))
     ax.annotate("", xy=(xs_d - 0.3, 4.2), xytext=(5.0, 4.2), arrowprops=dict(arrowstyle="->", color=NEGRO, lw=2))
-    ax.text(8.0, 4.9, f"mediana = {mediana:.2f}", ha="center", va="bottom", fontsize=10.5, family="monospace", color=NEGRO)
+    ax.text(8.0, 4.9, f"mediana = {_mil(mediana, 2)}", ha="center", va="bottom", fontsize=10.5, family="monospace", color=NEGRO)
     ax.text(8.0, 3.6, "fillna(mediana)\n+ isna().astype(int)", ha="center", va="top", fontsize=9.5, family="monospace", color=GRIS)
     ax.text(15.2, 0.55, "el modelo ve el valor típico Y sabe que esa fila venía vacía", ha="center", fontsize=10, color=ROJO)
     return _leyenda(fig, "rellenar con la mediana evita botar filas; la columna de 0/1 conserva la información de que el dato "
                          "faltaba (que a veces es lo que de verdad informa, como el N/D de hoy).")
 
 
-def memorizar_vs_aprender(n=260, semilla=11):
+def memorizar_vs_aprender(n=260, semilla=11, titulos=True):
     """(A) Sobreajuste con datos sintéticos de 2 variables: el mismo problema con un árbol corto y uno sin límite.
     Puntos llenos = entrenamiento; puntos huecos = prueba. El árbol sin límite dibuja islas alrededor de cada punto
-    de entrenamiento y falla más en los huecos."""
+    de entrenamiento y falla más en los huecos.
+    titulos=False: versión para el 🔍 (sin nombres ni accuracies que delaten la respuesta)."""
     from sklearn.tree import DecisionTreeClassifier
     from sklearn.model_selection import train_test_split
     X, y = _datos_sinteticos(n, semilla)
@@ -2478,13 +2796,18 @@ def memorizar_vs_aprender(n=260, semilla=11):
             ax.scatter(X_te["hora"][y_te == c], X_te["velocidad"][y_te == c], s=34, facecolors="none", edgecolors=col, lw=1.4)
         a_tr, a_te = m.score(X_tr, y_tr), m.score(X_te, y_te)
         etiqueta = "sin límite" if d is None else str(d)
-        ax.set_title(f"max_depth = {etiqueta} · {nombre}\nentrenamiento {a_tr:.2f} · prueba {a_te:.2f} · {m.get_n_leaves()} hojas", fontsize=10.5)
+        if titulos:
+            ax.set_title(f"max_depth = {etiqueta} · {nombre}\nentrenamiento {a_tr:.2f} · prueba {a_te:.2f} · {m.get_n_leaves()} hojas", fontsize=10.5)
+        else:
+            ax.set_title(f"max_depth = {etiqueta}", fontsize=11)
         ax.set_xlabel("hora")
     axes[0].set_ylabel("velocidad")
     axes[0].scatter([], [], c=NEGRO, s=18, label="punto lleno = entrenamiento")
     axes[0].scatter([], [], facecolors="none", edgecolors=NEGRO, s=34, label="punto hueco = prueba (nunca visto)")
     axes[0].legend(loc="lower right", fontsize=8)
     plt.tight_layout()
+    if not titulos:
+        return _leyenda(fig, "puntos llenos = entrenamiento; huecos = prueba. ¿Cuál de los tres árboles acertará más huecos?")
     return _leyenda(fig, "a la derecha el fondo dibuja islas alrededor de puntos de entrenamiento sueltos: acierta todos los llenos "
                          "y falla más huecos que el árbol del medio. Memorizar no es aprender.")
 
@@ -2566,17 +2889,17 @@ def fit_solo_con_train():
         ax.text(x + w / 2, y + h / 2, t, ha="center", va="center", color=color, fontsize=fs, fontweight=peso, linespacing=1.35)
     caja(0.5, 5.6, 7.4, 2.6, "ENTRENAMIENTO\nX_train, y_train", AZUL, AZUL)
     caja(0.5, 1.0, 7.4, 2.6, "PRUEBA\nX_test, y_test", ROJO, ROJO)
-    caja(10.3, 5.3, 6.6, 3.2, "lo aprendido\n\nmedia y desviación\nmediana · tasa por dirección", "white", NEGRO, color=NEGRO, fs=10, peso="normal")
-    ax.text(13.6, 8.85, ".fit(X_train)", ha="center", fontsize=11, family="monospace", color=AZUL, fontweight="bold")
-    caja(19.4, 5.6, 5.2, 2.6, "X_train\ntransformado", "#EEF3FA", AZUL, color=AZUL)
-    caja(19.4, 1.0, 5.2, 2.6, "X_test\ntransformado", "#FBECEA", ROJO, color=ROJO)
+    caja(10.3, 5.3, 6.2, 3.2, "lo aprendido\n\nmedia y desviación\nmediana · tasa por dirección", "white", NEGRO, color=NEGRO, fs=10, peso="normal")
+    ax.text(13.4, 8.85, ".fit(X_train)", ha="center", fontsize=11, family="monospace", color=AZUL, fontweight="bold")
+    caja(19.8, 5.6, 5.0, 2.6, "X_train\ntransformado", "#EEF3FA", AZUL, color=AZUL)
+    caja(19.8, 1.0, 5.0, 2.6, "X_test\ntransformado", "#FBECEA", ROJO, color=ROJO)
     ax.annotate("", xy=(10.3, 6.9), xytext=(7.9, 6.9), arrowprops=dict(arrowstyle="-|>", color=AZUL, lw=2.4, mutation_scale=18))
     ax.text(9.1, 7.3, "aprende", ha="center", fontsize=9.5, color=AZUL)
-    ax.annotate("", xy=(19.4, 6.9), xytext=(16.9, 6.9), arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=2, mutation_scale=18))
-    ax.text(18.15, 7.3, ".transform()", ha="center", fontsize=9.5, family="monospace", color=NEGRO)
-    ax.annotate("", xy=(19.4, 2.3), xytext=(13.6, 5.3), arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=2, mutation_scale=18,
+    ax.annotate("", xy=(19.8, 6.9), xytext=(16.5, 6.9), arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=2, mutation_scale=18))
+    ax.text(18.15, 7.25, ".transform()", ha="center", fontsize=9.5, family="monospace", color=NEGRO)
+    ax.annotate("", xy=(19.8, 2.3), xytext=(13.4, 5.3), arrowprops=dict(arrowstyle="-|>", color=NEGRO, lw=2, mutation_scale=18,
                                                                         connectionstyle="arc3,rad=-0.15"))
-    ax.text(15.0, 2.7, ".transform()", ha="center", fontsize=9.5, family="monospace", color=NEGRO)
+    ax.text(15.7, 3.45, ".transform()", ha="center", fontsize=9.5, family="monospace", color=NEGRO)
     ax.annotate("", xy=(10.3, 5.9), xytext=(7.9, 2.3), arrowprops=dict(arrowstyle="-|>", color=ROJO, lw=2.2, mutation_scale=18, ls="--"))
     ax.text(8.5, 4.6, "NUNCA", ha="center", fontsize=11, color=ROJO, fontweight="bold", rotation=52,
             bbox=dict(boxstyle="round,pad=.2", fc="white", ec="none"))

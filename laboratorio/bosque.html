@@ -30,7 +30,7 @@
   <section class="vista" id="mira">
     <div class="lienzo"><div class="doble">
       <div><div class="etiqueta-lienzo" id="m-etq1">Un árbol, con su muestra (resaltados: los que le tocaron)</div><canvas id="c-m-arbol"></canvas></div>
-      <div><div class="etiqueta-lienzo" id="m-etq2">El bosque hasta ahora (promedio de los votos)</div><canvas id="c-m-bosque"></canvas></div>
+      <div><div class="etiqueta-lienzo" id="m-etq2">El bosque hasta ahora (promedio de lo que dice cada árbol)</div><canvas id="c-m-bosque"></canvas></div>
     </div>
       <div class="leyenda"><span><i style="background:#4C8DDB"></i>solo daños</span><span><i style="background:#E0645A"></i>con víctimas</span><span>Fondo: zonas que predice el árbol / el bosque</span></div></div>
     <aside class="panel">
@@ -65,7 +65,7 @@
         <div class="cifra"><div class="v" id="j-ate">—</div><div class="e">acc. prueba</div></div>
       </div>
       <canvas id="c-j-curva"></canvas>
-      <p class="mirar"><b>Qué mirar:</b> con pocos árboles el mapa es un mosaico; con muchos se vuelve <b>suave</b> y las probabilidades intermedias (morado) aparecen en las zonas dudosas. Más árboles nunca empeora la prueba: solo cuesta tiempo. La profundidad importa mucho menos que en un árbol solo.</p>
+      <p class="mirar"><b>Qué mirar:</b> con pocos árboles el mapa es un mosaico; con muchos se vuelve <b>suave</b> y las probabilidades intermedias (morado) aparecen en las zonas dudosas. Más árboles no causan sobreajuste: la prueba sube y se estabiliza; lo que cuesta es tiempo. La profundidad importa mucho menos que en un árbol solo.</p>
     </aside>
   </section>
 
@@ -73,7 +73,7 @@
   <section class="vista" id="reto">
     <div class="lienzo"><div class="etiqueta-lienzo">Accuracy según el número de árboles (todos sin límite de profundidad)</div><canvas id="c-reto"></canvas></div>
     <aside class="panel">
-      <h3>Predice antes de correr</h3>
+      <h3>Prediga antes de correr</h3>
       <div class="reto">
         <p class="pregunta">Un árbol <b>sin límite de profundidad</b> acierta el 100 % en entrenamiento y solo el <b id="r-a1">—</b> en prueba: sobreajusta. Si ponemos <b>100 árboles sin límite</b> a votar, ¿qué pasa en la prueba?</p>
         <div class="opciones" id="r-ops">
@@ -113,9 +113,9 @@ const pred = (nd, x) => (nd.izq ? pred(x[nd.f] <= nd.t ? nd.izq : nd.der, x) : n
 function arbolBootstrap(i, max) { const r = azar(1000 + i), M = Array.from({ length: TR.length }, () => TR[Math.floor(r() * TR.length)]); return { T: crecer(M, 0, max, r), M }; }
 const cacheB = new Map();
 function bosque(n, max) { const k = max; if (!cacheB.has(k)) cacheB.set(k, []); const B = cacheB.get(k); while (B.length < n) B.push(arbolBootstrap(B.length, max)); return B.slice(0, n); }
-const probB = (B, x) => B.reduce((s, b) => s + (pred(b.T, x) >= 0.5 ? 1 : 0), 0) / B.length;   // voto por mayoría
+const probB = (B, x) => B.reduce((s, b) => s + pred(b.T, x), 0) / B.length;   // promedio de las probabilidades de cada árbol (como scikit-learn)
 const accT = (T, P) => P.reduce((s, p) => s + ((pred(T, p.x) >= 0.5 ? 1 : 0) === p.y), 0) / P.length;
-const accB = (B, P) => P.reduce((s, p) => s + ((probB(B, p.x) >= 0.5 ? 1 : 0) === p.y), 0) / P.length;
+const accB = (B, P) => P.reduce((s, p) => s + ((probB(B, p.x) > 0.5 ? 1 : 0) === p.y), 0) / P.length;   // empate (0,5) → clase 0, como scikit-learn
 
 // ------------------------------------------------------------ dibujo
 function marco(L) { L.margen = { l: 44, r: 12, t: 10, b: 36 }; const m = L.margen; return { sx: escala(0, 24, m.l, L.w - m.r), sy: escala(20, 100, L.h - m.b, m.t) }; }
@@ -126,7 +126,7 @@ function zonas(L, s, nd, x0 = 0, x1 = 24, y0 = 20, y1 = 100) { const { ctx } = L
 const G = 48;
 function fondoBosque(L, s, B, suave) { const { ctx } = L, cw = (s.sx(24) - s.sx(0)) / G, ch = (s.sy(20) - s.sy(100)) / G;
   for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) { const p = probB(B, [(i + .5) / G * 24, 20 + (j + .5) / G * 80]);
-    ctx.fillStyle = colorProb(suave ? p : (p >= 0.5 ? 0.85 : 0.15), 0.32); ctx.fillRect(s.sx(i / G * 24), s.sy(20 + (j + 1) / G * 80), cw + 0.5, ch + 0.5); } }
+    ctx.fillStyle = colorProb(suave ? p : (p > 0.5 ? 0.85 : 0.15), 0.32); ctx.fillRect(s.sx(i / G * 24), s.sy(20 + (j + 1) / G * 80), cw + 0.5, ch + 0.5); } }
 function base(L) { if (!L.w) return; L.ctx.clearRect(0, 0, L.w, L.h); return marco(L); }
 function ejesMapa(L, s) { ejes(L, s.sx, s.sy, { xt: [0, 6, 12, 18, 24], yt: [20, 40, 60, 80, 100], xl: "hora del día", yl: "velocidad (km/h)" }); }
 function puntos(L, s, P, r = 3, borde, alpha) { P.forEach((p) => punto(L.ctx, s.sx(p.x[0]), s.sy(p.x[1]), r, alpha ? (p.y ? "rgba(224,100,90,.2)" : "rgba(76,141,219,.2)") : (p.y ? COL.rojo : COL.azul), borde)); }
@@ -180,9 +180,9 @@ LR.alDibujar = rDibujar;
 opciones("r-ops", (v) => { SR.elegido = v; document.getElementById("r-ver").disabled = false; });
 document.getElementById("r-ver").onclick = () => { SR.visto = true; const cv = curva(99), f = cv[cv.length - 1], r = document.getElementById("r-resp");
   r.innerHTML = (SR.elegido === "mejor" ? '<span class="ok">Exacto.</span> ' : '<span class="no">Sorpresa:</span> ') +
-    `con 100 árboles, la prueba sube de ${pct(A1)} a <b>${pct(f.te)}</b>, y el entrenamiento sigue en ${pct(f.tr)}. Cada árbol sigue memorizando su muestra, pero memoriza <b>ruido distinto</b>: ` +
+    `Con 100 árboles, la prueba sube de ${pct(A1)} a <b>${pct(f.te)}</b>, y el entrenamiento sigue en ${pct(f.tr)}. Cada árbol sigue memorizando su muestra, pero memoriza <b>ruido distinto</b>: ` +
     "al votar, el ruido se cancela y lo que todos vieron (la franja diagonal) se queda; los escalones de 100 árboles, promediados, se vuelven una frontera casi lisa. Por eso el bosque casi no necesita que le limiten la profundidad, " +
-    "y por eso la curva se aplana: después de ~30 árboles, agregar más ya no cambia el voto. El precio: 100 árboles son 100 veces más lentos y no se pueden leer como reglas.";
+    "y por eso la curva se aplana: después de unas decenas de árboles, agregar más casi no cambia el voto. El precio: 100 árboles son 100 veces más lentos y no se pueden leer como reglas.";
   r.classList.add("visible"); rDibujar(); };
 
 pestanas(() => [LA, LB, LJ, LC, LR].forEach((L) => L.ajustar()));
