@@ -40,6 +40,12 @@ Cada algoritmo, para tocarlo: **[nitobest.github.io/curso-aad-python/laboratorio
 
 ---
 
+## 📎 Fichas de referencia
+
+Una página por algoritmo, para tener abierta mientras trabaja en el notebook o para imprimir: qué hace, cómo funciona en cuatro viñetas, cómo se ve en Python y qué significa cada parámetro. Están en **[fichas/](fichas/README.md)**: la serie de los 13 algoritmos y técnicas ([PDF](fichas/algoritmos/fichas_algoritmos.pdf)) y la serie «Dentro del `.fit()`» sobre funciones de pérdida y optimización ([PDF](fichas/dentro-del-fit/fichas_dentro_del_fit.pdf)).
+
+---
+
 ## Calendario
 
 Lunes y miércoles, 7:00–9:00 p.m. No hay clase los lunes festivos 12-oct, 2-nov y 16-nov.
