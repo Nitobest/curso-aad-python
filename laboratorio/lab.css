@@ -86,3 +86,6 @@ footer.lab a { color: var(--suave); }
 .tarjeta h2 { margin: 0; font-size: 20px; }
 .tarjeta p { margin: 0; color: var(--suave); font-size: 14.5px; }
 .tarjeta.pronto { opacity: .45; pointer-events: none; }
+
+/* número del laboratorio en el índice (orden del curso) */
+.tarjeta h2 .num{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;margin-right:.35em;border-radius:50%;background:var(--c);color:#0d1424;font-size:.8em;font-weight:700;vertical-align:.1em}
