@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>8 · PCA y t-SNE · Laboratorio</title>
+<link rel="stylesheet" href="lab.css">
+<style>:root { --acento: var(--m3); }
+.leyenda { display: flex; gap: 14px; font-size: 12.5px; color: var(--suave); margin: 6px 4px 0; flex-wrap: wrap; }
+.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.oculto { display: none !important; }</style>
+</head>
+<body>
+<div class="envoltura">
+  <header class="lab">
+    <div>
+      <div class="chip">Sesión 8 · Módulo 3 · No supervisado</div>
+      <h1>8 · PCA y t-SNE: muchas columnas en un dibujo</h1>
+      <p class="sub"><b>PCA</b> gira los ejes hasta encontrar la dirección en la que los datos más se esparcen. <b>t-SNE</b> acomoda los puntos en 2D tratando de que cada uno conserve a sus vecinos. Uno resume; el otro dibuja. Y el dibujo puede engañar.</p>
+    </div>
+    <a class="volver" href="index.html">← Todos los laboratorios</a>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-v="mira"><span class="n">1</span>Mira</button>
+    <button data-v="juega"><span class="n">2</span>Juega</button>
+    <button data-v="reto"><span class="n">3</span>Reto 💥</button>
+  </nav>
+
+  <!-- ===================== MIRA ===================== -->
+  <section class="vista" id="mira">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">Los datos y la sombra sobre la línea</div><canvas id="c-mira"></canvas></div>
+      <div><div class="etiqueta-lienzo">Varianza de la sombra según el ángulo</div><canvas id="c-curva"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Buscar la dirección de máxima varianza</h3>
+      <p id="m-texto"></p>
+      <div class="botones">
+        <button class="b primario" id="m-sig">Siguiente</button>
+        <button class="b" id="m-reset">↺ Empezar</button>
+      </div>
+      <div class="control"><label><span>Gire usted la línea</span> <output id="m-ang-o">0°</output></label>
+        <input type="range" id="m-ang" min="0" max="179" value="0"></div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="m-var">—</div><div class="e">varianza de la sombra</div></div>
+        <div class="cifra"><div class="v" id="m-pct">—</div><div class="e">del total</div></div>
+      </div>
+      <p class="mirar"><b>Qué mirar:</b> la varianza total (la suma de las varianzas de las dos medidas) no cambia al girar. Lo que cambia es <b>cuánta</b> de ella cae sobre la línea. PC1 es el ángulo que se lleva la tajada más grande.</p>
+    </aside>
+  </section>
+
+  <!-- ===================== JUEGA ===================== -->
+  <section class="vista" id="juega">
+    <div class="lienzo"><div class="etiqueta-lienzo" id="j-etq"></div><canvas id="c-juega"></canvas>
+      <div class="leyenda" id="j-ley"></div></div>
+    <aside class="panel">
+      <h3>342 pingüinos, 4 medidas</h3>
+      <p>Pico largo, pico alto, aleta y masa, <b>escaladas</b> (z). Ningún método ve la especie: el color solo sirve para revisar después.</p>
+      <div class="opciones" id="j-modo">
+        <button data-v="pca" aria-pressed="true">PCA</button>
+        <button data-v="tsne">t-SNE</button>
+      </div>
+      <div id="j-ctl-tsne" class="oculto" style="display:flex;flex-direction:column;gap:12px">
+        <div class="control"><label><span><i>Perplexity</i> (≈ vecinos que mira cada punto)</span> <output id="j-perp-o">30</output></label>
+          <input type="range" id="j-perp" min="0" max="5" value="3"></div>
+        <div class="botones"><button class="b" id="j-sem">↺ Otra semilla</button></div>
+      </div>
+      <label class="check"><input type="checkbox" id="j-color" checked> Colorear por especie</label>
+      <div class="cifras" id="j-cifras"></div>
+      <p class="mirar" id="j-mirar"></p>
+    </aside>
+  </section>
+
+  <!-- ===================== RETO ===================== -->
+  <section class="vista" id="reto">
+    <div class="lienzo"><div class="etiqueta-lienzo" id="r-etq">t-SNE de 300 clientes con 10 medidas cada uno (perplexity 2)</div><canvas id="c-reto"></canvas></div>
+    <aside class="panel">
+      <h3>Prediga antes de correr</h3>
+      <div class="reto">
+        <p class="pregunta">Un analista le pasa este dibujo: 300 clientes, 10 medidas, reducidos a 2D con t-SNE. "Miren, hay segmentos". ¿Cuántos grupos de clientes hay <b>de verdad</b> en los datos?</p>
+        <div class="opciones" id="r-ops">
+          <button data-v="1">Ninguno</button>
+          <button data-v="pocos">2 a 4</button>
+          <button data-v="varios">5 a 10</button>
+          <button data-v="muchos">Más de 10</button>
+        </div>
+        <div class="botones" style="margin-top:10px"><button class="b primario" id="r-ver" disabled>Revelar cómo se fabricaron</button></div>
+        <div class="respuesta" id="r-resp"></div>
+      </div>
+      <div class="reto oculto" id="r-paso2">
+        <p class="pregunta">Ahora usted: ¿sobreviven los "grupos" si cambia la perplexity o la semilla? ¿Y con PCA?</p>
+        <div class="opciones" id="r-modo">
+          <button data-v="tsne" aria-pressed="true">t-SNE</button>
+          <button data-v="pca">PCA</button>
+        </div>
+        <div class="control" id="r-ctl-perp" style="margin-top:10px"><label><span><i>Perplexity</i></span> <output id="r-perp-o">2</output></label>
+          <input type="range" id="r-perp" min="0" max="5" value="0"></div>
+        <div class="botones"><button class="b" id="r-sem">↺ Otra semilla</button></div>
+        <div class="respuesta" id="r-resp2"></div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="lab">Introducción al Análisis Avanzado de Datos con Python · Univalle · Datos: Palmer Penguins (Gorman, Williams y Fraser, 2014; CC0). Los clientes del reto son números al azar fabricados en su navegador.</footer>
+</div>
+
+<script src="lab.js"></script>
+<script src="pinguinos.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------ álgebra pequeña
+const media = (X) => X[0].map((_, d) => X.reduce((s, x) => s + x[d], 0) / X.length);
+function covarianza(X) { const m = media(X), p = m.length, C = Array.from({ length: p }, () => new Array(p).fill(0));
+  X.forEach((x) => { for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) C[a][b] += (x[a] - m[a]) * (x[b] - m[b]); });
+  return C.map((f) => f.map((v) => v / (X.length - 1))); }
+function jacobi(A0) {                 // autovalores y autovectores de una matriz simétrica (PCA = esto)
+  const n = A0.length, A = A0.map((f) => f.slice()), V = A.map((_, i) => A.map((_, j) => (i === j ? 1 : 0)));
+  for (let barrido = 0; barrido < 60; barrido++) {
+    let off = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i][j] ** 2; if (off < 1e-18) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) { if (Math.abs(A[p][q]) < 1e-15) continue;
+      const th = (A[q][q] - A[p][p]) / (2 * A[p][q]), t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < n; k++) { const akp = A[k][p], akq = A[k][q]; A[k][p] = c * akp - s * akq; A[k][q] = s * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = A[p][k], aqk = A[q][k]; A[p][k] = c * apk - s * aqk; A[q][k] = s * apk + c * aqk; }
+      for (let k = 0; k < n; k++) { const vkp = V[k][p], vkq = V[k][q]; V[k][p] = c * vkp - s * vkq; V[k][q] = s * vkp + c * vkq; } }
+  }
+  return A.map((f, i) => ({ l: f[i], v: V.map((r) => r[i]) })).sort((a, b) => b.l - a.l);
+}
+function pca(X) { const m = media(X), E = jacobi(covarianza(X)), tot = E.reduce((s, e) => s + e.l, 0);
+  E.forEach((e) => { const k = e.v.reduce((a, b, i) => (Math.abs(b) > Math.abs(e.v[a]) ? i : a), 0); if (e.v[k] < 0) e.v = e.v.map((v) => -v); });  // signo estable
+  return { E, ratio: E.map((e) => e.l / tot), T: X.map((x) => E.slice(0, 2).map((e) => e.v.reduce((s, w, d) => s + w * (x[d] - m[d]), 0))) }; }
+const zscore = (X) => { const m = media(X), s = m.map((_, d) => Math.sqrt(X.reduce((a, x) => a + (x[d] - m[d]) ** 2, 0) / X.length));
+  return X.map((x) => x.map((v, d) => (v - m[d]) / s[d])); };
+
+// ------------------------------------------------------------ t-SNE exacto (el mismo de scikit-learn, sin atajos)
+function tsneIniciar(X, perp, sem) {
+  const n = X.length, D = new Float64Array(n * n), P = new Float64Array(n * n), H = Math.log(perp), fila = new Float64Array(n);
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { let s = 0; for (let d = 0; d < X[i].length; d++) s += (X[i][d] - X[j][d]) ** 2; D[i * n + j] = D[j * n + i] = s; }
+  for (let i = 0; i < n; i++) {         // ancho de la campana de cada punto: el que da "perp" vecinos efectivos
+    let beta = 1, bmin = -Infinity, bmax = Infinity;
+    for (let t = 0; t < 80; t++) {
+      let sum = 0, sdp = 0; for (let j = 0; j < n; j++) { const v = j === i ? 0 : Math.exp(-D[i * n + j] * beta); fila[j] = v; sum += v; sdp += v * D[i * n + j]; }
+      sum = Math.max(sum, 1e-300); const Hc = Math.log(sum) + beta * sdp / sum;
+      if (Math.abs(Hc - H) < 1e-5) break;
+      if (Hc > H) { bmin = beta; beta = bmax === Infinity ? beta * 2 : (beta + bmax) / 2; } else { bmax = beta; beta = bmin === -Infinity ? beta / 2 : (beta + bmin) / 2; }
+    }
+    const s = fila.reduce((a, b) => a + b, 0) || 1; for (let j = 0; j < n; j++) P[i * n + j] = fila[j] / s;
+  }
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const v = Math.max((P[i * n + j] + P[j * n + i]) / (2 * n), 1e-12); P[i * n + j] = P[j * n + i] = v; }
+  const r = azar(sem), Y = new Float64Array(2 * n); for (let k = 0; k < 2 * n; k++) Y[k] = 1e-4 * r.normal();   // init='random'
+  return { n, P, Y, U: new Float64Array(2 * n), G: new Float64Array(2 * n).fill(1), it: 0, lr: Math.max(n / 12 / 4, 50), num: new Float64Array(n * n) };
+}
+const TSNE_ITS = 750;
+function tsnePaso(T) {
+  const { n, P, Y, U, G, num } = T, ex = T.it < 250 ? 12 : 1, mom = T.it < 250 ? 0.5 : 0.8; let Z = 0;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const dx = Y[2 * i] - Y[2 * j], dy = Y[2 * i + 1] - Y[2 * j + 1], q = 1 / (1 + dx * dx + dy * dy);
+    num[i * n + j] = num[j * n + i] = q; Z += 2 * q; }
+  for (let i = 0; i < n; i++) { let gx = 0, gy = 0;
+    for (let j = 0; j < n; j++) { if (i === j) continue; const q = num[i * n + j], m = (ex * P[i * n + j] - q / Z) * q;
+      gx += m * (Y[2 * i] - Y[2 * j]); gy += m * (Y[2 * i + 1] - Y[2 * j + 1]); }
+    [4 * gx, 4 * gy].forEach((g, d) => { const k = 2 * i + d; G[k] = Math.sign(g) !== Math.sign(U[k]) ? G[k] + 0.2 : Math.max(G[k] * 0.8, 0.01);
+      U[k] = mom * U[k] - T.lr * G[k] * g; }); }
+  let mx = 0, my = 0; for (let i = 0; i < n; i++) { Y[2 * i] += U[2 * i]; Y[2 * i + 1] += U[2 * i + 1]; mx += Y[2 * i]; my += Y[2 * i + 1]; }
+  for (let i = 0; i < n; i++) { Y[2 * i] -= mx / n; Y[2 * i + 1] -= my / n; }
+  T.it++;
+}
+// Corre t-SNE animado: unas iteraciones por cuadro; "dibujar" recibe el estado. Devuelve una función para cancelar.
+function tsneAnimar(T, dibujar, alTerminar, porCuadro = 12) {
+  let vivo = true;
+  const cuadro = () => { if (!vivo) return; for (let k = 0; k < porCuadro && T.it < TSNE_ITS; k++) tsnePaso(T); dibujar(T);
+    if (T.it < TSNE_ITS) requestAnimationFrame(cuadro); else if (alTerminar) alTerminar(T); };
+  requestAnimationFrame(cuadro); return () => (vivo = false);
+}
+// Dibuja coordenadas 2D cualesquiera, encuadradas en el lienzo.
+function nube2D(L, pts, colores, r = 3.4) {
+  const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const m = 18;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; pts.forEach(([x, y]) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); });
+  const lado = Math.max(x1 - x0, y1 - y0) || 1, k = Math.min(L.w, L.h) - 2 * m, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  pts.forEach(([x, y], i) => punto(ctx, L.w / 2 + (x - cx) / lado * k, L.h / 2 - (y - cy) / lado * k, r, colores[i]));
+}
+const PERPS = [2, 3, 5, 10, 30, 50, 100];
+
+// ------------------------------------------------------------ MIRA: girar la línea
+const LM = lienzo("c-mira", 0.92), LC = lienzo("c-curva", 0.92);
+const NUBE = (() => { const r = azar(8), a = 32 * Math.PI / 180, P = [];
+  for (let i = 0; i < 160; i++) { const u = 1.75 * r.normal(), v = 0.5 * r.normal(); P.push([5 + u * Math.cos(a) - v * Math.sin(a), 5 + u * Math.sin(a) + v * Math.cos(a)]); }
+  return P; })();
+const CEN = media(NUBE), COV = covarianza(NUBE), VTOT = COV[0][0] + COV[1][1];
+const varSombra = (gr) => { const t = gr * Math.PI / 180, c = Math.cos(t), s = Math.sin(t); return c * c * COV[0][0] + 2 * c * s * COV[0][1] + s * s * COV[1][1]; };
+const PC1 = (() => { let b = 0; for (let g = 0; g < 180; g += 0.1) if (varSombra(g) > varSombra(b)) b = g; return b; })();
+const SM = { paso: 0, ang: 0, barrido: -1, rot: 0, anim: null };
+const TEXTOS_M = [
+  "160 puntos con dos medidas que se mueven juntas. Queremos <b>una sola columna</b> que los resuma perdiendo lo menos posible. Presione <b>Siguiente</b>.",
+  "<b>1. Una línea cualquiera.</b> Cada punto proyecta su <b>sombra</b> sobre la línea (el trazo fino). La nueva columna sería la posición de cada sombra sobre la línea.",
+  "<b>2. Girar.</b> Al girar la línea, las sombras se estiran y se encogen. A la derecha se va dibujando la varianza de la sombra para cada ángulo.",
+  "<b>3. PC1.</b> El ángulo donde las sombras quedan <b>más esparcidas</b> (máxima varianza). Esa dirección es el primer componente principal.",
+  "<b>4. PC2.</b> Perpendicular a PC1: recoge lo que sobró. Con 2 medidas hay 2 componentes y entre los dos suman el 100 %.",
+  "<b>5. Los ejes nuevos.</b> PCA gira los datos para que PC1 quede horizontal. Si se queda solo con PC1, conserva el <b>" + pct(varSombra(PC1) / VTOT) + "</b> de la varianza en una sola columna.",
+];
+function marcoM(L) { const m = 12, lado = Math.min(L.w, L.h) - 2 * m, ox = (L.w - lado) / 2, oy = (L.h - lado) / 2;
+  return { sx: escala(0, 10, ox, ox + lado), sy: escala(0, 10, oy + lado, oy) }; }
+function linea(ctx, s, gr, color, ancho, etiqueta) {
+  const t = gr * Math.PI / 180, ux = Math.cos(t), uy = Math.sin(t), R = 7;
+  ctx.strokeStyle = color; ctx.lineWidth = ancho; ctx.beginPath(); ctx.moveTo(s.sx(CEN[0] - R * ux), s.sy(CEN[1] - R * uy)); ctx.lineTo(s.sx(CEN[0] + R * ux), s.sy(CEN[1] + R * uy)); ctx.stroke();
+  if (etiqueta) { ctx.fillStyle = color; ctx.font = "bold 13px Inter, system-ui"; ctx.textAlign = "center";
+    const ex = Math.min(9.4, Math.max(0.6, CEN[0] + 4.3 * ux)), ey = Math.min(9.4, Math.max(0.6, CEN[1] + 4.3 * uy)); ctx.fillText(etiqueta, s.sx(ex) + 12, s.sy(ey) - 8); }
+}
+function mDibujar() {
+  if (!LM.w) return; const { ctx } = LM; ctx.clearRect(0, 0, LM.w, LM.h); const s = marcoM(LM);
+  ctx.save(); ctx.beginPath(); ctx.rect(s.sx(0), s.sy(10), s.sx(10) - s.sx(0), s.sy(0) - s.sy(10)); ctx.clip();
+  const rot = SM.rot * PC1 * Math.PI / 180, cr = Math.cos(-rot), sr = Math.sin(-rot);
+  const pts = NUBE.map(([x, y]) => { const dx = x - CEN[0], dy = y - CEN[1]; return [CEN[0] + dx * cr - dy * sr, CEN[1] + dx * sr + dy * cr]; });
+  ctx.strokeStyle = COL.rejilla; ctx.lineWidth = 1; for (let v = 0; v <= 10; v += 2) { ctx.beginPath(); ctx.moveTo(s.sx(v), s.sy(0)); ctx.lineTo(s.sx(v), s.sy(10)); ctx.moveTo(s.sx(0), s.sy(v)); ctx.lineTo(s.sx(10), s.sy(v)); ctx.stroke(); }
+  if (SM.paso >= 1 && SM.paso < 5) {
+    const t = SM.ang * Math.PI / 180, ux = Math.cos(t), uy = Math.sin(t);
+    pts.forEach(([x, y]) => { const k = (x - CEN[0]) * ux + (y - CEN[1]) * uy, fx = CEN[0] + k * ux, fy = CEN[1] + k * uy;
+      ctx.strokeStyle = "rgba(240,149,58,.28)"; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(s.sx(x), s.sy(y)); ctx.lineTo(s.sx(fx), s.sy(fy)); ctx.stroke(); });
+    linea(ctx, s, SM.ang, COL.m3, 2.5, SM.paso >= 3 && Math.abs(SM.ang - PC1) < 0.6 ? "PC1" : "");
+    pts.forEach(([x, y]) => { const k = (x - CEN[0]) * ux + (y - CEN[1]) * uy; punto(ctx, s.sx(CEN[0] + k * ux), s.sy(CEN[1] + k * uy), 2.2, "#F6C08A"); });
+    if (SM.paso >= 4) linea(ctx, s, PC1 + 90, COL.m4, 2.2, "PC2");
+  }
+  if (SM.paso === 5) { linea(ctx, s, PC1 * (1 - SM.rot), COL.m3, 2.5, SM.rot > 0.99 ? "PC1" : ""); linea(ctx, s, PC1 * (1 - SM.rot) + 90, COL.m4, 2.2, SM.rot > 0.99 ? "PC2" : ""); }
+  pts.forEach(([x, y]) => punto(ctx, s.sx(x), s.sy(y), 3.2, SM.paso >= 1 && SM.paso < 5 ? "rgba(76,141,219,.55)" : COL.azul));
+  ctx.restore();
+  // curva
+  if (!LC.w) return; const g = LC.ctx; g.clearRect(0, 0, LC.w, LC.h); LC.margen = { l: 40, r: 12, t: 14, b: 36 }; const m = LC.margen;
+  const vmax = varSombra(PC1) * 1.12, sx = escala(0, 180, m.l, LC.w - m.r), sy = escala(0, vmax, LC.h - m.b, m.t);
+  ejes(LC, sx, sy, { xt: [0, 45, 90, 135, 180], fx: (v) => v + "°", yt: [0, 1, 2, 3].filter((v) => v < vmax), fy: (v) => fmt(v, 0), xl: "ángulo de la línea", yl: "varianza" });
+  const hasta = SM.paso === 0 ? -1 : SM.paso === 1 ? SM.ang : SM.paso === 2 ? SM.barrido : 179.9;
+  if (hasta >= 0) { g.strokeStyle = COL.m3; g.lineWidth = 2.5; g.beginPath(); for (let a = 0; a <= hasta + 1e-9; a += 1) (a ? g.lineTo(sx(a), sy(varSombra(a))) : g.moveTo(sx(a), sy(varSombra(a)))); g.stroke(); }
+  if (SM.paso >= 3) { g.setLineDash([4, 4]); g.strokeStyle = COL.m3; g.lineWidth = 1; g.beginPath(); g.moveTo(sx(PC1), m.t); g.lineTo(sx(PC1), LC.h - m.b); g.stroke(); g.setLineDash([]);
+    g.fillStyle = COL.m3; g.font = "bold 12px Inter, system-ui"; g.textAlign = PC1 > 120 ? "right" : "left"; g.fillText("PC1 · " + fmt(PC1, 0) + "°", sx(PC1) + (PC1 > 120 ? -6 : 6), m.t + 12); }
+  if (SM.paso >= 4) { const a2 = (PC1 + 90) % 180; punto(g, sx(a2), sy(varSombra(a2)), 5, COL.m4); g.fillStyle = COL.m4; g.textAlign = "center"; g.fillText("PC2", sx(a2), sy(varSombra(a2)) - 10); }
+  if (SM.paso >= 1 && SM.paso < 5) punto(g, sx(SM.ang), sy(varSombra(SM.ang)), 5.5, "#FFFFFF", COL.m3);
+  // cifras
+  const a = SM.paso >= 1 ? (SM.paso === 5 ? PC1 : SM.ang) : null;
+  document.getElementById("m-var").textContent = a === null ? "—" : fmt(varSombra(a), 2);
+  document.getElementById("m-pct").textContent = a === null ? "—" : pct(varSombra(a) / VTOT);
+}
+LM.alDibujar = LC.alDibujar = mDibujar;
+function mPonerAng(a) { SM.ang = a; document.getElementById("m-ang").value = Math.round(a); document.getElementById("m-ang-o").textContent = fmt(a, 0) + "°"; }
+function mAnimar(desde, hasta, dur, alPaso, fin) {
+  if (SM.anim) cancelAnimationFrame(SM.anim); const t0 = performance.now();
+  const f = (t) => { const a = Math.min(1, (t - t0) / dur), e = a < .5 ? 2 * a * a : 1 - Math.pow(-2 * a + 2, 2) / 2; alPaso(desde + (hasta - desde) * e); mDibujar();
+    if (a < 1) SM.anim = requestAnimationFrame(f); else { SM.anim = null; if (fin) fin(); } };
+  SM.anim = requestAnimationFrame(f);
+}
+function mIr(p) {
+  SM.paso = p; document.getElementById("m-texto").innerHTML = TEXTOS_M[p]; document.getElementById("m-sig").disabled = p >= 5;
+  document.getElementById("m-ang").disabled = p === 5;
+  if (p === 0) { SM.rot = 0; mPonerAng(0); mDibujar(); }
+  else if (p === 1) { SM.rot = 0; mPonerAng(0); mDibujar(); }
+  else if (p === 2) { SM.barrido = 0; mAnimar(0, 179, 3200, (a) => { SM.barrido = a; mPonerAng(a); }); }
+  else if (p === 3) { const d = SM.ang; mAnimar(d, PC1, 900, (a) => mPonerAng(a)); }
+  else if (p === 4) { mPonerAng(PC1); mDibujar(); }
+  else if (p === 5) { mAnimar(0, 1, 1400, (v) => (SM.rot = v)); }
+}
+document.getElementById("m-sig").onclick = () => { if (SM.paso < 5) mIr(SM.paso + 1); };
+document.getElementById("m-reset").onclick = () => { if (SM.anim) cancelAnimationFrame(SM.anim); SM.anim = null; mIr(0); };
+document.getElementById("m-ang").oninput = (e) => { if (SM.anim) { cancelAnimationFrame(SM.anim); SM.anim = null; }
+  if (SM.paso === 0 || SM.paso === 2) { SM.paso = SM.paso === 0 ? 1 : 3; document.getElementById("m-texto").innerHTML = SM.paso === 1 ? TEXTOS_M[1] :
+    "Busque usted el ángulo donde la varianza de la sombra es <b>máxima</b>. Luego presione <b>Siguiente</b> para ver PC2."; document.getElementById("m-sig").disabled = false; }
+  mPonerAng(+e.target.value); mDibujar(); };
+
+// ------------------------------------------------------------ JUEGA: pingüinos con PCA y t-SNE
+const LJ = lienzo("c-juega", 0.7);
+const PX = PINGUINOS.map((p) => p.slice(0, 4)), PY = PINGUINOS.map((p) => p[4]), PZ = zscore(PX);
+const PCA_P = pca(PZ), VARS = ["pico largo", "pico alto", "aleta", "masa"];
+const ESPECIES = ["Adelie", "Chinstrap", "Gentoo"], COL_ESP = ["#E8C547", "#D96FB0", "#4FC3C9"];
+const SJ = { modo: "pca", perp: 30, sem: 1, T: null, parar: null };
+const colJ = () => PY.map((e) => (document.getElementById("j-color").checked ? COL_ESP[e] : "#8A97B0"));
+function leyendaEsp(id, ver) { document.getElementById(id).innerHTML = ver ? ESPECIES.map((e, j) => `<span><i style="background:${COL_ESP[j]}"></i>${e}</span>`).join("") : ""; }
+function cifras(id, pares) { document.getElementById(id).innerHTML = pares.map(([v, e]) => `<div class="cifra"><div class="v">${v}</div><div class="e">${e}</div></div>`).join(""); }
+function jDibujarPCA() {
+  if (!LJ.w) return; const { ctx } = LJ; ctx.clearRect(0, 0, LJ.w, LJ.h); LJ.margen = { l: 46, r: 14, t: 14, b: 40 }; const m = LJ.margen;
+  const sx = escala(-3.6, 4.2, m.l, LJ.w - m.r), sy = escala(-3, 3, LJ.h - m.b, m.t);
+  ejes(LJ, sx, sy, { xt: [-3, -2, -1, 0, 1, 2, 3, 4], yt: [-2, -1, 0, 1, 2], xl: `PC1 (${pct(PCA_P.ratio[0])} de la varianza)`, yl: `PC2 (${pct(PCA_P.ratio[1])})` });
+  const C = colJ(); PCA_P.T.forEach(([a, b], i) => punto(ctx, sx(a), sy(b), 3.3, C[i]));
+  PCA_P.E[0].v.forEach((_, d) => { const ax = 2.6 * PCA_P.E[0].v[d], ay = 2.6 * PCA_P.E[1].v[d];   // flechas del biplot: cuánto pesa cada medida en PC1 y PC2
+    ctx.strokeStyle = "#FFFFFF"; ctx.fillStyle = "#FFFFFF"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx(0), sy(0)); ctx.lineTo(sx(ax), sy(ay)); ctx.stroke();
+    const ang = Math.atan2(sy(ay) - sy(0), sx(ax) - sx(0)); ctx.beginPath(); ctx.moveTo(sx(ax), sy(ay));
+    ctx.lineTo(sx(ax) - 9 * Math.cos(ang - .4), sy(ay) - 9 * Math.sin(ang - .4)); ctx.lineTo(sx(ax) - 9 * Math.cos(ang + .4), sy(ay) - 9 * Math.sin(ang + .4)); ctx.fill();
+    ctx.font = "bold 12.5px Inter, system-ui"; ctx.textAlign = ax >= 0 ? "left" : "right"; ctx.fillText(VARS[d], sx(ax) + (ax >= 0 ? 6 : -6), sy(ay) + (ay >= 0 ? -6 : 14)); });
+}
+function jDibujar() { if (SJ.modo === "pca") return jDibujarPCA(); if (SJ.T) { const T = SJ.T, P = []; for (let i = 0; i < T.n; i++) P.push([T.Y[2 * i], T.Y[2 * i + 1]]); nube2D(LJ, P, colJ()); }
+  if (SJ.T) cifras("j-cifras", [[fmt(SJ.T.it, 0), "iteración"], [SJ.perp, "perplexity"], ["#" + SJ.sem, "semilla"]]); }
+LJ.alDibujar = jDibujar;
+function jCorrer() {
+  if (SJ.parar) SJ.parar(); SJ.parar = null;
+  const pca_ = SJ.modo === "pca"; document.getElementById("j-ctl-tsne").classList.toggle("oculto", pca_);
+  leyendaEsp("j-ley", document.getElementById("j-color").checked);
+  const mi = document.getElementById("j-mirar");
+  if (pca_) {
+    document.getElementById("j-etq").textContent = "Biplot: los pingüinos sobre PC1 y PC2; las flechas dicen cuánto pesa cada medida";
+    cifras("j-cifras", PCA_P.ratio.map((r, k) => [pct(r), "PC" + (k + 1)]));
+    mi.innerHTML = "<b>Qué mirar:</b> PC1 se lleva casi el 70 % y apunta hacia aleta, masa y pico largo: es el <b>tamaño</b> del pingüino. PC2 es casi solo el pico alto. Gentoo (grande) queda a un lado; Adelie y Chinstrap se separan menos. PCA es una <b>fórmula cerrada</b>: siempre da el mismo dibujo.";
+    jDibujarPCA(); return;
+  }
+  document.getElementById("j-etq").textContent = "t-SNE de los mismos 342 pingüinos (corriendo en su navegador)";
+  mi.innerHTML = "<b>Qué mirar:</b> t-SNE <b>no tiene ejes</b> que se puedan leer: solo importa quién queda al lado de quién. Mueva la <i>perplexity</i>: con 2 o 3 la nube se rompe en astillas; con 30–50 aparecen las especies. Con <b>Otra semilla</b> los grupos cambian de lugar y de forma, pero los vecinos se mantienen.";
+  SJ.T = tsneIniciar(PZ, SJ.perp, SJ.sem); SJ.parar = tsneAnimar(SJ.T, jDibujar);
+}
+opciones("j-modo", (v) => { SJ.modo = v; jCorrer(); });
+document.getElementById("j-perp").oninput = (e) => { SJ.perp = PERPS[+e.target.value + 1]; document.getElementById("j-perp-o").textContent = SJ.perp; jCorrer(); };
+document.getElementById("j-sem").onclick = () => { SJ.sem += 1; jCorrer(); };
+document.getElementById("j-color").onchange = () => { leyendaEsp("j-ley", document.getElementById("j-color").checked); jDibujar(); };
+
+// ------------------------------------------------------------ RETO: grupos que no existen
+const LR = lienzo("c-reto", 0.7);
+const RUIDO = (() => { const r = azar(2026); return Array.from({ length: 300 }, () => Array.from({ length: 10 }, () => r.normal())); })();
+const PCA_R = pca(RUIDO);
+const SR = { visto: false, elegido: null, modo: "tsne", perp: 2, sem: 1, T: null, parar: null, listo: false };
+function rDibujar() {
+  if (!LR.w) return;
+  if (SR.modo === "pca") { nube2D(LR, PCA_R.T, PCA_R.T.map(() => COL.m3), 3.2); return; }
+  if (!SR.T) return; const T = SR.T, P = []; for (let i = 0; i < T.n; i++) P.push([T.Y[2 * i], T.Y[2 * i + 1]]); nube2D(LR, P, P.map(() => COL.m3), 3.2);
+}
+LR.alDibujar = rDibujar;
+function rCorrer(animar) {
+  if (SR.parar) SR.parar(); SR.parar = null;
+  document.getElementById("r-etq").textContent = SR.modo === "pca"
+    ? `PCA de los mismos 300 clientes (PC1 ${pct(PCA_R.ratio[0])}, PC2 ${pct(PCA_R.ratio[1])})`
+    : `t-SNE de 300 clientes con 10 medidas cada uno (perplexity ${SR.perp}, semilla #${SR.sem})`;
+  if (SR.modo === "pca") return rDibujar();
+  SR.T = tsneIniciar(RUIDO, SR.perp, SR.sem);
+  if (animar) SR.parar = tsneAnimar(SR.T, rDibujar);
+  else { while (SR.T.it < TSNE_ITS) tsnePaso(SR.T); rDibujar(); }
+}
+opciones("r-ops", (v) => { SR.elegido = v; document.getElementById("r-ver").disabled = false; });
+document.getElementById("r-ver").onclick = () => {
+  SR.visto = true; const r = document.getElementById("r-resp"), bien = SR.elegido === "1";
+  r.innerHTML = (bien ? '<span class="ok">Exacto: ninguno.</span> ' : '<span class="no">Sorpresa: ninguno.</span> ') +
+    "Los 300 \"clientes\" son <b>números al azar</b>: cada una de sus 10 medidas sale de la misma campana, sin grupos de ningún tipo. " +
+    "Con perplexity 2, t-SNE solo mira a los 2 o 3 vecinos más cercanos de cada punto, y en el ruido siempre hay vecinos un poco más cercanos que otros: los <b>exagera</b> hasta formar islotes. " +
+    "Un t-SNE con \"grupos\" <b>no prueba</b> que haya grupos.";
+  r.classList.add("visible"); document.getElementById("r-paso2").classList.remove("oculto");
+  document.getElementById("r-resp2").innerHTML = "<b>Cómo no caer:</b> (1) mire primero con <b>PCA</b>, que no inventa: aquí es una sola nube redonda y ningún componente se destaca (PC1 recoge apenas el " + pct(PCA_R.ratio[0]) + "). (2) Cambie la <i>perplexity</i> y la semilla: grupos reales sobreviven (como las especies de pingüinos en <b>Juega</b>); estos islotes cambian cada vez. (3) Compare con algo que el método <b>no usó</b> (la especie, una etiqueta conocida). Y nunca lea distancias ni tamaños de grupo en un t-SNE.";
+  document.getElementById("r-resp2").classList.add("visible");
+};
+opciones("r-modo", (v) => { SR.modo = v; document.getElementById("r-ctl-perp").style.display = v === "pca" ? "none" : ""; rCorrer(true); });
+document.getElementById("r-perp").oninput = (e) => { SR.perp = PERPS[+e.target.value]; document.getElementById("r-perp-o").textContent = SR.perp; rCorrer(true); };
+document.getElementById("r-sem").onclick = () => { SR.sem += 1; rCorrer(true); };
+
+pestanas((id) => { [LM, LC, LJ, LR].forEach((L) => L.ajustar());
+  if (id === "reto" && !SR.listo) { SR.listo = true; rCorrer(false); }
+  if (id === "juega" && !SJ.listo) { SJ.listo = true; jCorrer(); } });
+mIr(0);
+</script>
+</body>
+</html>

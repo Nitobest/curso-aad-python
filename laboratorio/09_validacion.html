@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>9 · Validación cruzada · Laboratorio</title>
+<link rel="stylesheet" href="lab.css">
+<style>:root { --acento: var(--m4); }
+.leyenda { display: flex; gap: 14px; font-size: 12.5px; color: var(--suave); margin: 6px 4px 0; flex-wrap: wrap; }
+.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.leyenda i.cuadro { border-radius: 2px; }
+.oculto { display: none !important; }</style>
+</head>
+<body>
+<div class="envoltura">
+  <header class="lab">
+    <div>
+      <div class="chip">Sesión 10 · Módulo 4 · Evaluación</div>
+      <h1>9 · Validación cruzada: muchos exámenes en vez de uno</h1>
+      <p class="sub">Una sola partición entrenamiento/prueba tiene <b>suerte</b> adentro. La validación cruzada parte los datos en <i>k</i> pedazos (<i>folds</i>) y hace <i>k</i> rondas: en cada una, un pedazo distinto hace de examen. El resultado es un promedio… y una dispersión.</p>
+    </div>
+    <a class="volver" href="index.html">← Todos los laboratorios</a>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-v="mira"><span class="n">1</span>Mira</button>
+    <button data-v="juega"><span class="n">2</span>Juega</button>
+    <button data-v="reto"><span class="n">3</span>Reto 💥</button>
+  </nav>
+
+  <!-- ===================== MIRA ===================== -->
+  <section class="vista" id="mira">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">Las 5 rondas y su AUC</div><canvas id="c-m-esq"></canvas></div>
+      <div><div class="etiqueta-lienzo" id="m-etq">600 clientes de una campaña bancaria</div><canvas id="c-m-mapa"></canvas>
+        <div class="leyenda"><span><i style="background:#4C8DDB"></i>no compró</span><span><i style="background:#E0645A"></i>sí compró</span><span><i style="background:rgba(255,255,255,.18);border:1px solid #fff"></i>validación de esta ronda</span></div></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Validación cruzada con 5 folds</h3>
+      <p id="m-texto"></p>
+      <div class="botones">
+        <button class="b primario" id="m-sig">Siguiente</button>
+        <button class="b" id="m-play">▶ Reproducir</button>
+        <button class="b" id="m-reset">↺ Empezar</button>
+      </div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="m-ronda">—</div><div class="e">ronda</div></div>
+        <div class="cifra"><div class="v" id="m-auc">—</div><div class="e">AUC de la ronda</div></div>
+        <div class="cifra"><div class="v" id="m-prom">—</div><div class="e">promedio</div></div>
+        <div class="cifra"><div class="v" id="m-sd">—</div><div class="e">± desviación</div></div>
+      </div>
+      <p class="mirar"><b>Qué mirar:</b> cada cliente es validación <b>exactamente una vez</b> y entrenamiento las otras cuatro. El modelo es el mismo (árbol de profundidad 4); lo único que cambia de ronda a ronda es <b>con qué</b> se entrena y <b>con qué</b> se examina. AUC: 0,5 es azar, 1 es perfecto (Sesión 6).</p>
+    </aside>
+  </section>
+
+  <!-- ===================== JUEGA ===================== -->
+  <section class="vista" id="juega">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">40 repeticiones con semillas distintas</div><canvas id="c-j-tiras"></canvas></div>
+      <div><div class="etiqueta-lienzo" id="j-etq">AUC de cada fold (esta semilla)</div><canvas id="c-j-folds"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Una partición contra k</h3>
+      <p>Arriba, 40 veces una sola partición 80/20. Abajo, 40 veces el <b>promedio</b> de una validación cruzada. Mismo modelo, mismos datos.</p>
+      <div class="opciones" id="j-n">
+        <button data-v="150">150 clientes</button>
+        <button data-v="600" aria-pressed="true">600</button>
+        <button data-v="2400">2 400</button>
+      </div>
+      <div class="control"><label><span>Número de folds <i>k</i></span> <output id="j-k-o">5</output></label>
+        <input type="range" id="j-k" min="0" max="3" value="2"></div>
+      <div class="botones"><button class="b primario" id="j-sem">🎲 Otra semilla</button></div>
+      <div class="cifras">
+        <div class="cifra"><div class="v" id="j-r1">—</div><div class="e">rango, una partición</div></div>
+        <div class="cifra"><div class="v" id="j-rk">—</div><div class="e">rango, validación cruzada</div></div>
+      </div>
+      <p class="mirar" id="j-mirar"></p>
+    </aside>
+  </section>
+
+  <!-- ===================== RETO ===================== -->
+  <section class="vista" id="reto">
+    <div class="lienzo"><div class="doble">
+      <div><div class="etiqueta-lienzo">AUC prometido y AUC real</div><canvas id="c-r-barras"></canvas></div>
+      <div><div class="etiqueta-lienzo" id="r-etq">Dónde quedaron las copias de algunos clientes</div><canvas id="c-r-esq"></canvas></div>
+    </div></div>
+    <aside class="panel">
+      <h3>Prediga antes de correr</h3>
+      <div class="reto">
+        <p class="pregunta">Solo el <span id="r-tasa">15 %</span> de los clientes compró. Truco muy popular: <b>duplicar</b> filas de "sí" al azar hasta que haya tantas como "no", y después validar con 5 folds. Sin el truco, el árbol profundo da AUC <span id="r-base">0,68</span>. ¿Con los "sí" duplicados?</p>
+        <div class="opciones" id="r-ops">
+          <button data-v="igual">Más o menos igual</button>
+          <button data-v="poco">Algo mejor (+0,03 a +0,08)</button>
+          <button data-v="mucho">Mucho mejor (por encima de 0,85)</button>
+        </div>
+        <div class="botones" style="margin-top:10px"><button class="b primario" id="r-ver" disabled>Validar con los "sí" duplicados</button></div>
+        <div class="respuesta" id="r-resp"></div>
+      </div>
+      <div class="reto oculto" id="r-paso2">
+        <p class="pregunta">Antes de celebrar: el 20 % de los clientes se apartó <b>al principio</b> y nadie lo ha tocado. ¿Qué AUC da ahí el árbol entrenado con los duplicados?</p>
+        <div class="botones"><button class="b primario" id="r-prueba">Abrir la prueba</button></div>
+        <div class="respuesta" id="r-resp2"></div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="lab">Introducción al Análisis Avanzado de Datos con Python · Univalle · Datos simulados con la forma de Bank Marketing (Sesiones 5, 6 y 10): pocos "sí", más frecuentes entre jóvenes, mayores de 60 y saldos altos.</footer>
+</div>
+
+<script src="lab.js"></script>
+<script>
+"use strict";
+// ------------------------------------------------------------ datos: clientes con edad y saldo
+function datos(n, sem) { const r = azar(sem), P = [];
+  for (let i = 0; i < n; i++) { const e = r.entre(18, 90), s = Math.min(10, Math.max(0, 3 + 2.2 * r.normal()));
+    const z = -3 + 1.6 * ((e > 60) || (e < 25)) + 0.35 * (s - 3); P.push({ x: [e, s], y: r() < 1 / (1 + Math.exp(-z)) ? 1 : 0, id: i }); }
+  return P; }
+function barajar(P, sem) { const r = azar(sem), S = P.slice(); for (let i = S.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [S[i], S[j]] = [S[j], S[i]]; } return S; }
+function folds(P, k, sem) {   // estratificado: la misma proporción de "sí" en cada fold (StratifiedKFold)
+  const S = barajar(P, sem), F = Array.from({ length: k }, () => []); let a = 0, b = 0;
+  S.forEach((p) => { if (p.y) F[a++ % k].push(p); else F[b++ % k].push(p); }); return F; }
+
+// ------------------------------------------------------------ árbol CART con Gini (el de la Sesión 1) + AUC
+const gini = (n1, n) => (n ? 1 - (n1 / n) ** 2 - (1 - n1 / n) ** 2 : 0);
+function mejorCorte(P, minHoja) { let b = null;
+  for (let f = 0; f < 2; f++) { const S = P.slice().sort((u, v) => u.x[f] - v.x[f]), n = P.length, n1 = P.reduce((s, p) => s + p.y, 0); let l1 = 0;
+    for (let i = 0; i < n - 1; i++) { l1 += S[i].y; if (S[i].x[f] === S[i + 1].x[f]) continue; const nl = i + 1, nr = n - nl; if (nl < minHoja || nr < minHoja) continue;
+      const g = (nl * gini(l1, nl) + nr * gini(n1 - l1, nr)) / n; if (!b || g < b.g - 1e-12) b = { f, t: (S[i].x[f] + S[i + 1].x[f]) / 2, g }; } }
+  return b; }
+function crecer(P, max, minHoja, prof = 0) {
+  const n1 = P.reduce((s, p) => s + p.y, 0), nodo = { p: n1 / P.length };
+  if (prof >= max || n1 === 0 || n1 === P.length) return nodo;
+  const c = mejorCorte(P, minHoja); if (!c || c.g >= gini(n1, P.length) - 1e-12) return nodo;
+  nodo.f = c.f; nodo.t = c.t; nodo.izq = crecer(P.filter((p) => p.x[c.f] <= c.t), max, minHoja, prof + 1); nodo.der = crecer(P.filter((p) => p.x[c.f] > c.t), max, minHoja, prof + 1);
+  return nodo; }
+const pred = (nd, x) => (nd.izq ? pred(x[nd.f] <= nd.t ? nd.izq : nd.der, x) : nd.p);
+function auc(T, P) {          // probabilidad de que un "sí" al azar reciba más puntaje que un "no" al azar (empates valen ½)
+  const s = P.map((p) => pred(T, p.x)), idx = s.map((_, i) => i).sort((a, b) => s[a] - s[b]), r = new Array(s.length);
+  for (let i = 0; i < idx.length;) { let j = i; while (j + 1 < idx.length && s[idx[j + 1]] === s[idx[i]]) j++; for (let k = i; k <= j; k++) r[idx[k]] = (i + j) / 2 + 1; i = j + 1; }
+  const n1 = P.reduce((a, p) => a + p.y, 0), n0 = P.length - n1; let sr = 0; P.forEach((p, i) => { if (p.y) sr += r[i]; });
+  return (sr - n1 * (n1 + 1) / 2) / (n1 * n0); }
+const recall = (T, P) => { const pos = P.filter((p) => p.y); return pos.filter((p) => pred(T, p.x) >= 0.5).length / pos.length; };
+const prom = (a) => a.reduce((s, v) => s + v, 0) / a.length, desv = (a) => { const m = prom(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / a.length); };
+const ARBOL = { max: 4, min: 5 }, PROFUNDO = { max: 30, min: 10 };
+function validar(P, k, sem, mod) { const F = folds(P, k, sem);
+  return F.map((va, j) => { const tr = F.flatMap((f, i) => (i === j ? [] : f)); return auc(crecer(tr, mod.max, mod.min), va); }); }
+
+// ------------------------------------------------------------ dibujo del mapa (edad × saldo)
+function marcoMapa(L) { L.margen = { l: 40, r: 10, t: 10, b: 34 }; const m = L.margen; return { sx: escala(18, 90, m.l, L.w - m.r), sy: escala(0, 10, L.h - m.b, m.t) }; }
+function colorProb(p, a) { const c0 = [76, 141, 219], c1 = [224, 100, 90], q = Math.min(1, p * 2.2);
+  return `rgba(${Math.round(c0[0] + (c1[0] - c0[0]) * q)},${Math.round(c0[1] + (c1[1] - c0[1]) * q)},${Math.round(c0[2] + (c1[2] - c0[2]) * q)},${a})`; }
+function zonas(L, s, nd, x0 = 18, x1 = 90, y0 = 0, y1 = 10) { const { ctx } = L;
+  if (!nd.izq) { ctx.fillStyle = colorProb(nd.p, 0.28); ctx.fillRect(s.sx(x0), s.sy(y1), s.sx(x1) - s.sx(x0), s.sy(y0) - s.sy(y1)); return; }
+  if (nd.f === 0) { zonas(L, s, nd.izq, x0, nd.t, y0, y1); zonas(L, s, nd.der, nd.t, x1, y0, y1); } else { zonas(L, s, nd.izq, x0, x1, y0, nd.t); zonas(L, s, nd.der, x0, x1, nd.t, y1); } }
+function mapa(L, { tr = [], va = [], T = null }) {
+  if (!L.w) return; const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); const s = marcoMapa(L);
+  if (T) zonas(L, s, T);
+  ejes(L, s.sx, s.sy, { xt: [20, 40, 60, 80], yt: [0, 2, 4, 6, 8, 10], xl: "edad", yl: "saldo (millones)" });
+  tr.forEach((p) => punto(ctx, s.sx(p.x[0]), s.sy(p.x[1]), 2.3, p.y ? "rgba(224,100,90,.35)" : "rgba(76,141,219,.25)"));
+  va.forEach((p) => punto(ctx, s.sx(p.x[0]), s.sy(p.x[1]), 3.4, p.y ? COL.rojo : COL.azul, "#FFFFFF"));
+}
+
+// ------------------------------------------------------------ MIRA: 5 rondas
+const LME = lienzo("c-m-esq", 0.9), LMM = lienzo("c-m-mapa", 0.9);
+const DM = datos(600, 11), FM = folds(DM, 5, 3), TASA = prom(DM.map((p) => p.y));
+const RONDAS = FM.map((va, j) => { const tr = FM.flatMap((f, i) => (i === j ? [] : f)), T = crecer(tr, ARBOL.max, ARBOL.min); return { va, tr, T, a: auc(T, va) }; });
+const SM = { paso: 0, play: null };
+const TEXTOS_M = [
+  `600 clientes; el ${pct(TASA)} compró. Se barajan y se reparten en <b>5 pedazos</b> (folds) del mismo tamaño, cada uno con la misma proporción de "sí" (eso es <i>estratificar</i>). Presione <b>Siguiente</b>.`,
+  ...[1, 2, 3, 4, 5].map((j) => `<b>Ronda ${j}.</b> El fold ${j} se aparta como examen (aros blancos). El árbol se entrena <b>desde cero</b> con los otros cuatro (480 clientes) y se mide en los 120 que no vio.` +
+    (j === 2 ? " Mire cómo cambian las zonas del árbol: otros datos, otros cortes." : j === 5 ? " Último fold: ya todos fueron examen una vez." : "")),
+  "<b>Resultado.</b> Cinco notas en vez de una. Se reporta el <b>promedio</b> y la <b>desviación</b>: si la desviación es grande, una sola partición habría podido decir casi cualquier cosa. En scikit-learn: <code>cross_val_score(modelo, X, y, cv=5, scoring=\"roc_auc\")</code>.",
+];
+function mDibujar() {
+  const p = SM.paso, j = p >= 1 && p <= 5 ? p - 1 : -1, hechas = RONDAS.slice(0, Math.min(p, 5));
+  // esquema
+  const L = LME; if (L.w) { const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h);
+    const ml = 64, mr = 58, top = 8, alto = L.h * 0.62, fila = alto / 5, ancho = (L.w - ml - mr) / 5;
+    ctx.font = "12px Inter, system-ui"; ctx.textBaseline = "middle";
+    for (let r = 0; r < 5; r++) { const y = top + r * fila, act = r === j, vista = r < hechas.length;
+      ctx.fillStyle = act ? COL.texto : COL.tenue; ctx.textAlign = "right"; ctx.fillText("Ronda " + (r + 1), ml - 8, y + fila / 2);
+      for (let c = 0; c < 5; c++) { const x = ml + c * ancho, val = r === c;
+        ctx.fillStyle = p === 0 ? COL.grupos[c] + "99" : val ? (vista || act ? COL.m4 : "rgba(155,111,217,.25)") : (vista || act ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.06)");
+        ctx.fillRect(x + 2, y + 3, ancho - 4, fila - 6);
+        if (val && (vista || act) && p > 0 && ancho >= 60) { ctx.fillStyle = "#0D1424"; ctx.textAlign = "center"; ctx.font = "bold 11px Inter, system-ui"; ctx.fillText("examen", x + ancho / 2, y + fila / 2); ctx.font = "12px Inter, system-ui"; } }
+      if (vista) { ctx.fillStyle = COL.texto; ctx.textAlign = "left"; ctx.font = "bold 13px Inter, system-ui"; ctx.fillText(fmt(RONDAS[r].a, 2), L.w - mr + 8, y + fila / 2); ctx.font = "12px Inter, system-ui"; }
+      if (act) { ctx.strokeStyle = COL.m4; ctx.lineWidth = 2; ctx.strokeRect(ml - 1, y + 1, 5 * ancho + 2, fila - 2); } }
+    ctx.textBaseline = "alphabetic";
+    // tira de notas
+    const y0 = top + alto + 44, sx = escala(0.55, 0.85, ml, L.w - mr);
+    ctx.strokeStyle = COL.eje; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx(0.55), y0); ctx.lineTo(sx(0.85), y0); ctx.stroke();
+    ctx.fillStyle = COL.tenue; ctx.textAlign = "center"; ctx.font = "11px Inter, system-ui";
+    [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85].forEach((v) => { ctx.fillText(fmt(v, 2), sx(v), y0 + 16); ctx.fillRect(sx(v) - 0.5, y0 - 3, 1, 6); });
+    ctx.fillStyle = COL.suave; ctx.font = "12px Inter, system-ui"; ctx.fillText("AUC en el fold de examen", (ml + L.w - mr) / 2, y0 + 34);
+    hechas.forEach((r, k) => punto(ctx, sx(r.a), y0 - 10, 6, k === j ? "#FFFFFF" : COL.m4));
+    if (p === 6) { const as = RONDAS.map((r) => r.a), m = prom(as), d = desv(as);
+      ctx.fillStyle = "rgba(155,111,217,.25)"; ctx.fillRect(sx(m - d), y0 - 20, sx(m + d) - sx(m - d), 20);
+      ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx(m), y0 - 24); ctx.lineTo(sx(m), y0); ctx.stroke();
+      ctx.fillStyle = COL.texto; ctx.font = "bold 12px Inter, system-ui"; ctx.fillText("promedio " + fmt(m, 3), sx(m), y0 - 28); } }
+  // mapa
+  if (j >= 0) mapa(LMM, { tr: RONDAS[j].tr, va: RONDAS[j].va, T: RONDAS[j].T }); else mapa(LMM, { tr: p === 0 ? [] : DM, va: p === 0 ? DM : [] });
+  document.getElementById("m-etq").textContent = j >= 0 ? `Ronda ${j + 1}: zonas del árbol entrenado con los otros 4 folds` : "600 clientes de una campaña bancaria";
+  // texto y cifras
+  document.getElementById("m-texto").innerHTML = TEXTOS_M[p];
+  const as = hechas.map((r) => r.a);
+  document.getElementById("m-ronda").textContent = j >= 0 ? `${j + 1} de 5` : p === 6 ? "5 de 5" : "—";
+  document.getElementById("m-auc").textContent = j >= 0 ? fmt(RONDAS[j].a, 3) : "—";
+  document.getElementById("m-prom").textContent = as.length ? fmt(prom(as), 3) : "—";
+  document.getElementById("m-sd").textContent = as.length > 1 ? fmt(desv(as), 3) : "—";
+  document.getElementById("m-sig").disabled = p >= 6;
+}
+LME.alDibujar = LMM.alDibujar = mDibujar;
+function pararPlay() { if (SM.play) { clearInterval(SM.play); SM.play = null; document.getElementById("m-play").textContent = "▶ Reproducir"; } }
+document.getElementById("m-sig").onclick = () => { pararPlay(); if (SM.paso < 6) SM.paso++; mDibujar(); };
+document.getElementById("m-reset").onclick = () => { pararPlay(); SM.paso = 0; mDibujar(); };
+document.getElementById("m-play").onclick = () => { if (SM.play) return pararPlay(); if (SM.paso >= 6) SM.paso = 0;
+  document.getElementById("m-play").textContent = "⏸ Pausa"; SM.paso++; mDibujar();
+  SM.play = setInterval(() => { if (SM.paso >= 6) return pararPlay(); SM.paso++; mDibujar(); }, 1400); };
+
+// ------------------------------------------------------------ JUEGA: la lotería, una contra k
+const LJT = lienzo("c-j-tiras", 0.9), LJF = lienzo("c-j-folds", 0.9), KS = [2, 3, 5, 10];
+const SJ = { n: 600, k: 5, sem: 1 }, cache = {};
+function corridas(n, k) { const c = `${n}-${k}`; if (cache[c]) return cache[c];
+  const D = datos(n, 11), uno = [], cv = [], porFold = [];
+  for (let s = 1; s <= 40; s++) { const S = barajar(D, 100 + s), nte = Math.round(n * 0.2);
+    uno.push(auc(crecer(S.slice(nte), ARBOL.max, ARBOL.min), S.slice(0, nte)));
+    const f = validar(D, k, 200 + s, ARBOL); porFold.push(f); cv.push(prom(f)); }
+  return (cache[c] = { uno, cv, porFold }); }
+function jDibujar() {
+  const R = corridas(SJ.n, SJ.k), i = SJ.sem - 1;
+  const rango = (a) => `${fmt(Math.min(...a), 2)}–${fmt(Math.max(...a), 2)}`;
+  document.getElementById("j-r1").textContent = rango(R.uno); document.getElementById("j-rk").textContent = rango(R.cv);
+  document.getElementById("j-k-o").textContent = SJ.k;
+  document.getElementById("j-etq").textContent = `AUC de cada uno de los ${SJ.k} folds (semilla #${SJ.sem})`;
+  const lo = Math.min(0.35, ...R.uno, ...R.porFold.flat()), hi = 1;
+  // tiras
+  const L = LJT; if (L.w) { const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); L.margen = { l: 14, r: 14, t: 10, b: 34 }; const m = L.margen;
+    const sx = escala(lo, hi, m.l, L.w - m.r), filas = [["Una sola partición 80/20", R.uno, COL.m1], [`Validación cruzada, promedio de ${SJ.k} folds`, R.cv, COL.m4]];
+    ejes(L, sx, escala(0, 1, L.h - m.b, m.t), { xt: [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].filter((v) => v >= lo), fx: (v) => fmt(v, 1), xl: "AUC" });
+    const alto = (L.h - m.t - m.b) / 2;
+    filas.forEach(([nombre, vals, c], f) => { const yc = m.t + alto * f + alto / 2 + 8;
+      ctx.fillStyle = COL.suave; ctx.font = "12.5px Inter, system-ui"; ctx.textAlign = "left"; ctx.fillText(nombre, m.l + 4, m.t + alto * f + 18);
+      const r = azar(5 + f); vals.forEach((v, k) => { if (k !== i) punto(ctx, sx(v), yc + (r() - 0.5) * alto * 0.45, 4, c + "AA"); });
+      punto(ctx, sx(vals[i]), yc, 6.5, "#E8C547", "#0D1424");
+      const mn = Math.min(...vals), mx = Math.max(...vals), yb = yc + alto * 0.32;
+      ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx(mn), yb); ctx.lineTo(sx(mx), yb); ctx.moveTo(sx(mn), yb - 4); ctx.lineTo(sx(mn), yb + 4); ctx.moveTo(sx(mx), yb - 4); ctx.lineTo(sx(mx), yb + 4); ctx.stroke(); }); }
+  // folds de esta semilla
+  const F = R.porFold[i], G = LJF; if (G.w) { const { ctx } = G; ctx.clearRect(0, 0, G.w, G.h); G.margen = { l: 40, r: 10, t: 12, b: 34 }; const m = G.margen;
+    const sx = escala(-0.5, F.length - 0.5, m.l, G.w - m.r), sy = escala(lo, hi, G.h - m.b, m.t);
+    ejes(G, sx, sy, { yt: [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].filter((v) => v >= lo), fy: (v) => fmt(v, 1), xl: "fold", yl: "AUC" });
+    const w = Math.min(46, (sx(1) - sx(0)) * 0.7);
+    F.forEach((v, k) => { ctx.fillStyle = "rgba(155,111,217,.75)"; ctx.fillRect(sx(k) - w / 2, sy(v), w, sy(lo) - sy(v));
+      if (F.length <= 5) { ctx.fillStyle = COL.texto; ctx.font = "bold 12px Inter, system-ui"; ctx.textAlign = "center"; ctx.fillText(fmt(v, 2), sx(k), sy(v) - 6); }
+      ctx.fillStyle = COL.tenue; ctx.font = "11px Inter, system-ui"; ctx.textAlign = "center"; ctx.fillText(k + 1, sx(k), G.h - m.b + 15); });
+    const mm = prom(F); ctx.strokeStyle = "#E8C547"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(m.l, sy(mm)); ctx.lineTo(G.w - m.r, sy(mm)); ctx.stroke();
+    ctx.fillStyle = "#E8C547"; ctx.font = "bold 12px Inter, system-ui"; ctx.textAlign = "left"; ctx.fillText("promedio " + fmt(mm, 3) + " ± " + fmt(desv(F), 3), m.l + 6, m.t + 4); }
+  const msg = SJ.n === 150 ? "Con 150 clientes (unos 22 \"sí\"), una sola partición puede dar desde algo <b>peor que el azar</b> hasta un modelo brillante. El promedio de la validación cruzada también se mueve, pero bastante menos."
+    : SJ.n === 2400 ? "Con 2 400 clientes las dos tiras se encogen: con muchos datos, la suerte de la partición pesa poco. La validación cruzada sigue siendo más estable, pero la diferencia importa menos."
+    : "La tira de arriba es el número que usted reportaría con <b>una</b> partición: depende de la semilla. Abajo, cada punto ya es un promedio de varios exámenes, y por eso se esparce menos.";
+  document.getElementById("j-mirar").innerHTML = "<b>Qué mirar:</b> " + msg + ` Mueva <b>k</b>: con más folds cada ronda entrena con más datos, pero cada examen es más pequeño y las notas de los folds (derecha) bailan más; el estándar es 5 o 10.`;
+}
+LJT.alDibujar = LJF.alDibujar = jDibujar;
+opciones("j-n", (v) => { SJ.n = +v; jDibujar(); });
+document.getElementById("j-k").oninput = (e) => { SJ.k = KS[+e.target.value]; jDibujar(); };
+document.getElementById("j-sem").onclick = () => { SJ.sem = (SJ.sem % 40) + 1; jDibujar(); };
+
+// ------------------------------------------------------------ RETO: duplicar los "sí" antes de partir
+const LRB = lienzo("c-r-barras", 0.9), LRE = lienzo("c-r-esq", 0.9);
+const SR = { fase: 0, elegido: null };
+const DR = datos(600, 11), SDR = barajar(DR, 7), PRUEBA = SDR.slice(0, 120), ENTR = SDR.slice(120);
+function duplicar(P, sem) { const si = P.filter((p) => p.y), no = P.filter((p) => !p.y), r = azar(sem);
+  return no.concat(si, Array.from({ length: no.length - si.length }, () => si[Math.floor(r() * si.length)])); }
+const DUP = duplicar(ENTR, 3), FD = folds(DUP, 5, 1);
+const CV_SIN = prom(validar(ENTR, 5, 1, PROFUNDO));
+const CV_DUP_R = FD.map((va, j) => { const T = crecer(FD.flatMap((f, i) => (i === j ? [] : f)), PROFUNDO.max, PROFUNDO.min); return { a: auc(T, va), r: recall(T, va) }; });
+const CV_DUP = prom(CV_DUP_R.map((x) => x.a)), REC_DUP = prom(CV_DUP_R.map((x) => x.r));
+const T_DUP = crecer(DUP, PROFUNDO.max, PROFUNDO.min), PRU_DUP = auc(T_DUP, PRUEBA), REC_PRU = recall(T_DUP, PRUEBA);
+const FE = folds(ENTR, 5, 1), CV_DENTRO = prom(FE.map((va, j) => auc(crecer(duplicar(FE.flatMap((f, i) => (i === j ? [] : f)), 20 + j), PROFUNDO.max, PROFUNDO.min), va)));
+document.getElementById("r-tasa").textContent = pct(prom(ENTR.map((p) => p.y)));
+document.getElementById("r-base").textContent = fmt(CV_SIN, 2);
+function rDibujar() {
+  const L = LRB; if (L.w) { const { ctx } = L; ctx.clearRect(0, 0, L.w, L.h); L.margen = { l: 36, r: 8, t: 14, b: 62 }; const m = L.margen;
+    const filas = [["CV sin truco", CV_SIN, COL.m1, 0], ["CV duplicando antes", CV_DUP, COL.rojo, 1], ["Prueba real", PRU_DUP, "#E8C547", 2], ["CV duplicando dentro", CV_DENTRO, COL.m2, 2]];
+    const sx = escala(-0.5, 3.5, m.l, L.w - m.r), sy = escala(0.5, 1, L.h - m.b, m.t);
+    ejes(L, sx, sy, { yt: [0.5, 0.6, 0.7, 0.8, 0.9, 1], fy: (v) => fmt(v, 1) });
+    filas.forEach(([nombre, a, c, fase], i) => { const ver = SR.fase >= fase, x0 = sx(i - 0.32), x1 = sx(i + 0.32);
+      ctx.fillStyle = ver ? c : "rgba(255,255,255,.06)"; const top = ver ? sy(a) : sy(0.5); ctx.fillRect(x0, top, x1 - x0, sy(0.5) - top);
+      if (ver) { ctx.fillStyle = COL.texto; ctx.font = "bold 13px Inter, system-ui"; ctx.textAlign = "center"; ctx.fillText(fmt(a, 2), (x0 + x1) / 2, sy(a) - 6); }
+      ctx.fillStyle = COL.suave; ctx.font = "11.5px Inter, system-ui"; ctx.textAlign = "center";
+      const ancho = sx(1) - sx(0) - 4, lineas = []; nombre.split(" ").forEach((w) => { const u = lineas.length ? lineas[lineas.length - 1] + " " + w : null;
+        if (u !== null && ctx.measureText(u).width <= ancho) lineas[lineas.length - 1] = u; else lineas.push(w); });
+      lineas.forEach((t, k) => ctx.fillText(t, (x0 + x1) / 2, L.h - m.b + 16 + 14 * k)); }); }
+  // esquema: copias de un mismo cliente repartidas entre folds
+  const E = LRE; if (!E.w) return; const g = E.ctx; g.clearRect(0, 0, E.w, E.h);
+  const cuenta = new Map(); FD.forEach((f, j) => f.forEach((p) => { if (!p.y) return; const c = cuenta.get(p.id) || new Array(5).fill(0); c[j]++; cuenta.set(p.id, c); }));
+  const ej = [...cuenta.entries()].filter(([, c]) => c[0] > 0 && c.slice(1).some((v) => v > 0)).sort((a, b) => b[1].reduce((s, v) => s + v, 0) - a[1].reduce((s, v) => s + v, 0)).slice(0, 7);
+  const ml = 86, mt = 30, ancho = (E.w - ml - 10) / 5, fila = Math.min(34, (E.h - mt - 70) / ej.length);
+  g.font = "12px Inter, system-ui"; g.textAlign = "center";
+  for (let c = 0; c < 5; c++) { g.fillStyle = c === 0 ? "rgba(155,111,217,.22)" : "rgba(255,255,255,.05)"; g.fillRect(ml + c * ancho + 2, mt - 6, ancho - 4, ej.length * fila + 8);
+    g.fillStyle = c === 0 ? COL.m4 : COL.tenue; g.fillText(c === 0 ? "examen" : "fold " + (c + 1), ml + c * ancho + ancho / 2, mt - 12); }
+  g.fillStyle = COL.tenue; g.textAlign = "left"; g.fillText("Ronda 1:", 4, mt - 12);
+  ej.forEach(([id, c], r) => { const y = mt + r * fila + fila / 2; g.fillStyle = COL.suave; g.textAlign = "right"; g.fillText("cliente " + id, ml - 8, y + 4);
+    c.forEach((v, j) => { const esp = Math.min(11, (ancho - 10) / Math.max(v, 1)); for (let k = 0; k < v; k++) punto(g, ml + j * ancho + ancho / 2 + (k - (v - 1) / 2) * esp, y, Math.min(4.2, esp / 2.2), COL.rojo); }); });
+  const yt = mt + ej.length * fila + 26; g.textAlign = "left"; g.font = "12.5px Inter, system-ui";
+  if (SR.fase >= 2) { g.fillStyle = COL.rojo; g.fillText("Cada punto es una copia del mismo cliente.", 4, yt);
+    g.fillText("En la ronda 1 el árbol se examina con clientes", 4, yt + 18); g.fillText("que ya vio, copiados, en entrenamiento.", 4, yt + 36); }
+  else { g.fillStyle = COL.tenue; g.fillText("Algunos clientes que compraron, después de duplicar", 4, yt); g.fillText("y repartir en 5 folds.", 4, yt + 18); }
+}
+LRB.alDibujar = LRE.alDibujar = rDibujar;
+opciones("r-ops", (v) => { SR.elegido = v; document.getElementById("r-ver").disabled = false; });
+document.getElementById("r-ver").onclick = () => {
+  SR.fase = Math.max(SR.fase, 1); const r = document.getElementById("r-resp"), bien = SR.elegido === "mucho";
+  r.innerHTML = (bien ? '<span class="ok">Eso promete.</span> ' : '<span class="no">Mucho más de lo que esperaba:</span> ') +
+    `la validación cruzada dice AUC <b>${fmt(CV_DUP, 2)}</b> y recall <b>${fmt(REC_DUP, 2)}</b> (encuentra ${pct(REC_DUP)} de los que compran). Un salto enorme con un truco de tres líneas. ¿Lo publicamos?`;
+  r.classList.add("visible"); document.getElementById("r-paso2").classList.remove("oculto"); rDibujar(); };
+document.getElementById("r-prueba").onclick = () => {
+  SR.fase = 2; const r = document.getElementById("r-resp2");
+  r.innerHTML = `En la prueba: AUC <b>${fmt(PRU_DUP, 2)}</b> y recall <b>${fmt(REC_PRU, 2)}</b>. El modelo no mejoró: <b>la medición se rompió</b>. ` +
+    "Los \"sí\" se duplicaron <b>antes</b> de partir en folds, así que copias del mismo cliente quedaron en entrenamiento <b>y</b> en examen de la misma ronda (derecha). Un árbol profundo las reconoce: no predice, <b>recuerda</b>. " +
+    `Es la fuga de la Sesión 3 en versión validación cruzada. La forma honesta es duplicar <b>dentro</b> de cada ronda, solo con los folds de entrenamiento: AUC <b>${fmt(CV_DENTRO, 2)}</b>, que sí se parece a la prueba. ` +
+    "Regla: todo lo que aprende de los datos (duplicar, escalar, imputar, elegir variables) va <b>dentro</b> del <code>Pipeline</code>, para que se repita en cada ronda.";
+  r.classList.add("visible"); rDibujar(); };
+
+pestanas(() => [LME, LMM, LJT, LJF, LRB, LRE].forEach((L) => L.ajustar()));
+mDibujar(); jDibujar(); rDibujar();
+</script>
+</body>
+</html>
