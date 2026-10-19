@@ -50,11 +50,14 @@ Una página por algoritmo, para tener abierta mientras trabaja en el notebook o 
 
 Lunes y miércoles, 7:00–9:00 p.m. No hay clase los lunes festivos 12-oct, 2-nov y 16-nov.
 
+> **Ajuste (19-oct):** el lunes 19 se dicta una sesión de nivelación de Python y pandas; la Sesión 2 pasa al miércoles 21. Las fechas de la Sesión 3 en adelante se confirman esta semana por el canal del curso.
+
 | Sesión | Fecha | Módulo | Entrega |
 |---|---|---|---|
 | 1 | mié 14-oct | M1 · Introducción al ML | |
-| 2 | lun 19-oct | M1 | |
-| 3 | mié 21-oct | M1 | se presenta E1 |
+| — | lun 19-oct | **Nivelación: Python y pandas desde cero** (sesión extra; cuenta como asistencia) | |
+| 2 | mié 21-oct | M1 | |
+| 3 | lun 26-oct · *por confirmar* | M1 | se presenta E1 |
 | 4 | lun 26-oct | M2 · Supervisado | E1 (antes de esta sesión) |
 | 5 | mié 28-oct | M2 | |
 | 6 | mié 4-nov | M2 | se presenta E2 |
@@ -73,6 +76,7 @@ Lunes y miércoles, 7:00–9:00 p.m. No hay clase los lunes festivos 12-oct, 2-n
 |---|---|---|---|
 | 0 | Antes del curso | Diagnóstico: Python, pandas y estadística básica (20–30 min, sin nota) | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S00/S00_diagnostico.ipynb) |
 | 1 | M1 · Introducción al ML | Qué es ML y el pipeline completo en una clase | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S01/S01_estudiante.ipynb) |
+| — | Nivelación | Python y pandas desde cero: de ingeniero de datos a científico de datos (32 833 canciones de Spotify; notebook completo, sin huecos) | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S01b/S01b_estudiante.ipynb) |
 | 2 | M1 · Introducción al ML | Mirar antes de modelar: datos y preprocesamiento | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S02/S02_estudiante.ipynb) |
 | 3 | M1 · Introducción al ML | Entrenar, probar y no hacerse trampa · **Entrega E1** | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S03/S03_estudiante.ipynb) |
 | 4 | M2 · Supervisado | Regresión lineal: qué hay dentro del `.fit()` | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/sesiones/S04/S04_estudiante.ipynb) |

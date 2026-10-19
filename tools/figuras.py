@@ -2259,7 +2259,7 @@ TRAMPAS_CURSO = [
     ("S11", "métrica", "Creerle al best_score_", "CV: 0,770", "datos nuevos: 0,714 (puesto 32 de 60)"),
 ]
 FAMILIAS_TRAMPA = {"fuga": ("fuga de información", ROJO), "métrica": ("métrica mal leída", MODULO[4]),
-                   "datos": ("el dato cambió", MODULO[1]), "analista": ("decisión del analista sin y", MODULO[3])}
+                   "datos": ("el dato cambió", MODULO[1]), "analista": ("decisión del analista (sin y)", MODULO[3])}
 
 
 def trampas_del_curso():
@@ -2283,7 +2283,7 @@ def trampas_del_curso():
         ax.text(0.4 + k * 3.1, -0.35, nom, va="center", fontsize=9)
     ax.set_title("Diez veces el número se veía mejor de lo que era", fontsize=12)
     return _leyenda(fig, "ninguna trampa produjo un error de Python: todas produjeron un número bonito. Cuatro familias: "
-                         "fugas, métricas mal leídas, datos que cambian y decisiones del analista que ninguna y delata.")
+                         "fugas, métricas mal leídas, datos que cambian y decisiones del analista cuando no hay una y que las delate.")
 
 
 def plan_presentaciones(n, total=120, apertura=10, pausa=5, cierre=15, colchon_min=3):
