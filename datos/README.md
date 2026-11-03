@@ -14,6 +14,8 @@ Todos los datos del curso están en esta carpeta. **No tiene que bajarlos a mano
 | [`bank.csv`](bank.csv) | S5, S6, S10–S12 | 45 211 × 17 | Campañas telefónicas de un banco portugués: datos del cliente y si abrió un depósito a término (`deposit`) | Moro, Cortez y Rita (2014), UCI Machine Learning Repository · CC BY 4.0 |
 | [`penguins.csv`](penguins.csv) | S7, S8 | 344 × 7 | Medidas de pingüinos de tres especies en la Antártida | Gorman, Williams y Fraser (2014); paquete `palmerpenguins` · CC0 |
 | [`municipios_ipm_2018.csv`](municipios_ipm_2018.csv) | S9 | 1 122 × 25 | Índice de Pobreza Multidimensional (IPM) y sus 15 privaciones por municipio, con departamento y coordenadas | DANE, IPM municipal del Censo 2018 + DIVIPOLA (datos.gov.co `gdxc-w37w`) |
+| [`hotel_bookings.csv.gz`](hotel_bookings.csv.gz) | Guía end-to-end del proyecto | 119 390 × 32 | Reservas de dos hoteles de Portugal (ciudad y playa), llegadas de jul-2015 a ago-2017: anticipación, estadía, huéspedes, canal, depósito, tarifa y si se canceló. Comprimido: pandas lo lee directo | Antonio, Almeida y Nunes (2019), *Hotel booking demand datasets*, *Data in Brief* 22, 41–49, DOI 10.1016/j.dib.2018.11.126 · CC BY 4.0 |
+| [`telco_churn.csv`](telco_churn.csv) | Plantilla del proyecto (dataset de práctica) | 7 043 × 21 | Clientes de una empresa de telecomunicaciones: servicios, contrato, cargos y si se fue (`Churn`) | IBM, *Telco Customer Churn* (datos de ejemplo), repositorio `IBM/telco-customer-churn-on-icp4d` · Apache 2.0 |
 
 La Sesión 8 usa además los dígitos escritos a mano que vienen incluidos en scikit-learn (`load_digits`, 1 797 imágenes de 8 × 8), y S7 genera datos de laboratorio con `make_blobs` y `make_moons`.
 

@@ -4,6 +4,11 @@ Es el único entregable obligatorio del curso. Usted elige **su propio dataset**
 
 **Requisitos del dataset:** mínimo 1 000 filas, al menos una variable objetivo (continua o categórica) y sin texto libre como variable principal.
 
+## Guía resuelta y plantilla
+
+- **[Guía end-to-end](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/proyecto/guia_end_to_end_hoteles.ipynb)** (`guia_end_to_end_hoteles.ipynb`): un proyecto completo y resuelto sobre *Hotel Booking Demand* (¿quién va a cancelar su reserva?): exploración, columnas con fuga, limpieza, *feature engineering*, `Pipeline`, desbalance, varios modelos (algunos como vitrina de lo que veremos), PCA y K-means, validación cruzada, búsqueda de hiperparámetros, prueba final, interpretación y `joblib`. Se lee y se ejecuta; no hay que completar nada.
+- **[Plantilla del proyecto](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/proyecto/plantilla_proyecto.ipynb)** (`plantilla_proyecto.ipynb`): las mismas secciones, vacías, para **su** dataset. Cada sección dice después de qué sesión llenarla, a qué entrega pertenece y qué debe quedar en ella. Úsela como esqueleto de sus entregas E1–E4.
+
 ## Entregas
 
 | Entrega | Se presenta en | Se entrega antes de | Qué se entrega | Peso |

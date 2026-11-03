@@ -97,6 +97,11 @@ Todos los notebooks ya están publicados, pero pueden recibir ajustes antes de c
 
 Es el único entregable obligatorio. Usted elige su propio dataset y lo lleva por el mismo pipeline que vemos en clase, en cuatro entregas parciales (E1–E4) y una presentación en la Sesión 12. Cada entrega se envía **por el canal que indique el profesor en la primera clase**, antes de la sesión siguiente a la del módulo (E1 antes de la Sesión 4, E2 antes de la 7, E3 antes de la 10, E4 antes de la 12). Detalles, formato y rúbrica: [`proyecto/README.md`](proyecto/README.md).
 
+| Material de apoyo | Qué es | Notebook |
+|---|---|---|
+| **Guía end-to-end** | Un proyecto completo y resuelto (cancelaciones de hotel), de los datos al modelo guardado, con las mismas secciones del proyecto | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/proyecto/guia_end_to_end_hoteles.ipynb) |
+| **Plantilla del proyecto** | Las mismas secciones, vacías, para su dataset: cada una dice después de qué sesión llenarla y a qué entrega pertenece | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/proyecto/plantilla_proyecto.ipynb) |
+
 Para cargar **sus** datos en Colab, súbalos a su Google Drive y use:
 
 ```python
