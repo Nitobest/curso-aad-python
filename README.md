@@ -101,6 +101,7 @@ Es el único entregable obligatorio. Usted elige su propio dataset y lo lleva po
 |---|---|---|
 | **Guía end-to-end** | Un proyecto completo y resuelto (cancelaciones de hotel), de los datos al modelo guardado, con las mismas secciones del proyecto | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/proyecto/guia_end_to_end_hoteles.ipynb) |
 | **Plantilla del proyecto** | Las mismas secciones, vacías, para su dataset: cada una dice después de qué sesión llenarla y a qué entrega pertenece | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/proyecto/plantilla_proyecto.ipynb) |
+| **Taller en parejas** | De Kaggle a dos modelos de regresión: eligen un dataset, lo exploran, lo preparan y comparan regresión lineal y árbol contra la línea base (ensayo de la Entrega 2) | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nitobest/curso-aad-python/blob/main/proyecto/taller_parejas_regresion.ipynb) |
 
 Para cargar **sus** datos en Colab, súbalos a su Google Drive y use:
 
