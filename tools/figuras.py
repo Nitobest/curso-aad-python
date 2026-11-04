@@ -894,6 +894,89 @@ def pred_vs_real(paneles, unidad=""):
                          "pregunte de dónde salió esa precisión.")
 
 
+# ------------------------------------------------------------------ S4 — supuestos de la regresión lineal
+def vif(X):
+    """Factor de inflación de la varianza de cada columna: VIF_j = 1 / (1 − R²_j), donde R²_j sale de
+    explicar x_j con las demás. Se calcula de una vez con la inversa de la matriz de correlaciones
+    (su diagonal es justo el VIF). 1 = nada redundante; > 5 alerta; > 10 problema; inf = copia exacta."""
+    X = pd.DataFrame(X).astype(float)
+    X = X.loc[:, X.std() > 0]                                     # una columna constante no tiene VIF
+    R = np.corrcoef(X.to_numpy(), rowvar=False)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        try:
+            v = np.diag(np.linalg.inv(R))
+        except np.linalg.LinAlgError:                             # colinealidad perfecta: matriz singular
+            v = np.full(R.shape[0], np.inf)
+    v = np.where(v > 1e8, np.inf, v)
+    return pd.Series(v, index=X.columns, name="VIF").sort_values(ascending=False)
+
+
+def durbin_watson(residuos):
+    """≈ 2: los errores seguidos no se parecen (independencia). Cerca de 0: cada error se parece al anterior."""
+    e = np.asarray(residuos, float)
+    return float(np.sum(np.diff(e) ** 2) / np.sum(e ** 2))
+
+
+def _media_por_tramo(x, y, tramos=10):
+    orden = np.argsort(x)
+    bx, by = np.array_split(np.asarray(x)[orden], tramos), np.array_split(np.asarray(y)[orden], tramos)
+    return np.array([b.mean() for b in bx]), np.array([b.mean() for b in by])
+
+
+def diagnostico_supuestos(y_real, y_pred, orden=None, max_puntos=4000):
+    """(B) Los supuestos 1–4 de la regresión lineal, con los residuos (y − ŷ) de un modelo ya entrenado.
+    Lo ideal es pasarle el conjunto de PRUEBA. orden: columna de tiempo para el panel de independencia
+    (si no se da, se usa el orden de las filas). El supuesto 5 (multicolinealidad) va aparte: fg.vif(X)."""
+    from scipy import stats
+    y_real, y_pred = np.asarray(y_real, float), np.asarray(y_pred, float)
+    res = y_real - y_pred
+    idx = np.arange(len(res))
+    if len(res) > max_puntos:                                     # para que la nube se lea con muchos datos
+        idx = np.sort(np.random.default_rng(0).choice(len(res), max_puntos, replace=False))
+    tramos = 5 if len(res) < 500 else 10
+    fig, axes = plt.subplots(1, 4, figsize=(17, 4.3))
+
+    ax = axes[0]
+    ax.scatter(y_pred[idx], res[idx], s=10, alpha=0.4, color=VERDE)
+    tx, ty = _media_por_tramo(y_pred, res, tramos)
+    ax.plot(tx, ty, "o-", color=ROJO, lw=2.2, ms=4)
+    ax.axhline(0, color=NEGRO, lw=0.9, ls="--")
+    ax.set_xlabel("predicción ŷ"); ax.set_ylabel("residuo (y − ŷ)")
+    sg = lambda v: ("−" if v < 0 else "") + _mil(abs(v))
+    ax.set_title(f"1 Linealidad: ¿nube sin forma?\nresiduo medio por tramo: de {sg(ty.min())} a {sg(ty.max())}")
+
+    ax = axes[1]
+    o = np.argsort(np.asarray(orden), kind="stable") if orden is not None else np.arange(len(res))
+    ax.plot(np.arange(len(res)), res[o], color=VERDE, lw=0.7, alpha=0.8)
+    ax.axhline(0, color=NEGRO, lw=0.9, ls="--")
+    ax.set_xlabel("filas en orden " + ("de tiempo" if orden is not None else "del archivo")); ax.set_ylabel("residuo")
+    ax.set_title(f"2 Independencia: ¿sin olas?\nDurbin–Watson = {durbin_watson(res[o]):.2f}  (≈ 2 es bueno)")
+
+    ax = axes[2]
+    ax.scatter(y_pred[idx], np.abs(res[idx]), s=10, alpha=0.4, color=VERDE)
+    tx, ta = _media_por_tramo(y_pred, np.abs(res), tramos)
+    ax.plot(tx, ta, "o-", color=ROJO, lw=2.2, ms=4)
+    ax.set_xlabel("predicción ŷ"); ax.set_ylabel("|residuo|  (tamaño del error)")
+    ax.set_title(f"3 Homocedasticidad: ¿banda pareja?\nerror típico: {_mil(ta[0])} (ŷ bajas) → {_mil(ta[-1])} (ŷ altas)")
+
+    ax = axes[3]
+    (teo, obs), (m, b, _) = stats.probplot(res[idx], dist="norm")
+    ax.scatter(teo, obs, s=10, alpha=0.5, color=VERDE)
+    ax.plot(teo[[0, -1]], m * teo[[0, -1]] + b, color=NEGRO, lw=1.1, ls="--")
+    ax.set_xlabel("cuantiles de una normal"); ax.set_ylabel("cuantiles de los residuos")
+    ax.set_title(f"4 Normalidad: ¿sobre la recta?\nasimetría = {stats.skew(res):.2f}  (0 = simétrica)")
+
+    for ax in axes:
+        ax.grid(color="#E6E6E6", lw=0.6)
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: ("−" if v < 0 else "") + _mil(abs(v))))
+    for ax in (axes[0], axes[2]):
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: ("−" if v < 0 else "") + _mil(abs(v))))
+    fig.tight_layout()
+    return _leyenda(fig, "compare cada panel con la columna «Cumple» de la ficha de supuestos. La línea roja es el "
+                         "promedio por tramos: si se curva (1) o sube (3), al modelo le falta algo; si en (4) los "
+                         "puntos se despegan de la recta, los intervalos clásicos no son de fiar.")
+
+
 # ================================================================== M2 · S5 — clasificación: logística y k-NN
 def _sigmoide(z):
     return 1 / (1 + np.exp(-z))
