@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guía de métricas de clasificación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* VOICE: profesor explicando en vivo, claro y técnico, sin adornos.
+   IDEA: la consola del call center: una perilla (el umbral) mueve toda la tabla de llamadas.
+   PICTURE: el laboratorio vivo arriba: notas de los clientes, la perilla, la matriz y el punto en la ROC.
+   COLOUR and TYPE: acero, negro, blanco; rojo alarma = "sí", pizarra azul = "no". Inter Tight + Inter.
+   LAYOUT: laboratorio a lo ancho, luego secciones en columna con figuras vivas y una guía final de decisión. */
+:root{color-scheme:light dark;
+--bg:light-dark(#f4f6f7,#16191c);--panel:light-dark(#ffffff,#1e2327);--steel:light-dark(#d5dbe0,#2b3238);
+--ink:light-dark(#0d0f11,#eef1f3);--muted:light-dark(#4d5761,#a3aeb7);--line:light-dark(#c3cbd2,#3a434b);
+--si:light-dark(#e8251a,#ff5b4f);--si2:light-dark(#fbd9d6,#4a2220);--no:light-dark(#35556f,#93b4cc);--no2:light-dark(#dbe5ee,#23313d)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:"Inter Tight",Inter,sans-serif;font-weight:700;line-height:1.08;text-wrap:balance;margin:0 0 .5em}
+h1{font-size:clamp(30px,4.4vw,48px)}h2{font-size:clamp(24px,3vw,34px)}h3{font-size:19px;margin-bottom:.35em}
+p{margin:0 0 .9em;max-width:70ch}
+.band{padding:clamp(28px,4vw,60px) max(5vw,16px)}
+.wrap{max-width:1240px;margin:0 auto}
+.top{background:var(--steel);border-bottom:1px solid var(--line)}
+.lede{color:var(--muted);font-size:17px}
+nav.scroll{display:flex;gap:6px;overflow-x:auto;padding:10px max(5vw,16px);background:var(--ink);}
+nav.scroll a{flex:none;color:var(--bg);text-decoration:none;font-size:14px;padding:8px 12px;border-radius:4px}
+nav.scroll a:hover,nav.scroll a:focus-visible{background:var(--si);color:#fff;outline:none}
+@media(min-width:900px){nav.scroll{position:sticky;top:0;z-index:5}}
+html{scroll-padding-top:72px;scroll-behavior:smooth}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+.lab{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;margin-top:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+.fig{position:relative;min-height:300px}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.fig.sq{min-height:320px}
+.knob{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:8px}
+.knob label{font-weight:600}
+input[type=range]{flex:1;min-width:180px;height:44px;accent-color:var(--si)}
+.tval{font:700 34px/1 "Inter Tight",sans-serif;font-variant-numeric:tabular-nums;min-width:3.2ch}
+.presets{display:flex;gap:6px;flex-wrap:wrap}
+button,.btn{font:600 15px Inter,sans-serif;min-height:44px;padding:0 14px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--ink)}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--si);outline-offset:2px}
+button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.cm{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:6px;font-variant-numeric:tabular-nums}
+.cm .h{font-size:13px;color:var(--muted);display:flex;align-items:center;justify-content:center;text-align:center;padding:4px}
+.cm .rh{writing-mode:vertical-rl;transform:rotate(180deg)}
+.cell{border-radius:4px;padding:12px 10px;min-height:96px;display:flex;flex-direction:column;justify-content:space-between}
+.cell b{font:700 clamp(24px,3vw,32px)/1 "Inter Tight",sans-serif}
+.cell small{font-size:13px;line-height:1.3}
+.vp{background:var(--si);color:#fff}.fn{background:var(--si2);color:var(--ink);border:2px dashed var(--si)}
+.fp{background:var(--no2);color:var(--ink);border:2px dashed var(--no)}.vn{background:var(--no);color:light-dark(#fff,#0d0f11)}
+.read{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.read div{background:var(--bg);border-radius:4px;padding:8px 10px}
+.read span{display:block;font-size:13px;color:var(--muted)}
+.read b{font:700 22px "Inter Tight",sans-serif;font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--muted)}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.m h3{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.m h3 b{font-variant-numeric:tabular-nums;font-size:24px}
+.q{font-weight:600}
+.f{font-size:15px;background:var(--bg);border-radius:4px;padding:6px 8px;margin:8px 0}
+.chip{display:inline-block;padding:0 6px;border-radius:3px;font-weight:600;font-size:14px}
+.c-vp{background:var(--si);color:#fff}.c-fn{background:var(--si2);border:1px dashed var(--si)}.c-fp{background:var(--no2);border:1px dashed var(--no)}.c-vn{background:var(--no);color:light-dark(#fff,#0d0f11)}
+.bar{height:8px;background:var(--steel);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ink)}
+.callout{border-left:4px solid var(--si);background:var(--panel);padding:14px 16px;border-radius:0 6px 6px 0;margin:16px 0}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:12px 0}
+.pair div{border-radius:6px;padding:12px;text-align:center}
+.pair b{display:block;font:700 30px "Inter Tight",sans-serif;font-variant-numeric:tabular-nums}
+.big{font:700 clamp(36px,6vw,56px)/1 "Inter Tight",sans-serif;font-variant-numeric:tabular-nums}
+.inputs{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.inputs label{display:flex;flex-direction:column;font-size:14px;gap:4px}
+.inputs input{font:16px Inter;min-height:44px;padding:0 10px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink);width:160px}
+table{border-collapse:collapse;width:100%;font-size:15px;background:var(--panel)}
+th,td{text-align:left;vertical-align:top;padding:10px;border-bottom:1px solid var(--line)}
+th{font-family:"Inter Tight",Inter,sans-serif;background:var(--steel)}
+td:first-child{font-weight:600;white-space:nowrap}
+.quiz fieldset{border:1px solid var(--line);border-radius:6px;margin:0 0 10px;padding:10px 14px}
+.quiz legend{font-weight:600;padding:0 4px}
+.quiz label{display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer}
+.quiz input{width:20px;height:20px;accent-color:var(--si)}
+#escTab td,#escTab th{white-space:nowrap;font-size:14px;padding:8px}#escTab td:not(:first-child){text-align:right}
+#rec{background:var(--ink);color:var(--bg);border-radius:6px;padding:18px}
+#rec h3{color:var(--bg)}#rec ul{margin:0;padding-left:1.2em}#rec li{margin-bottom:6px}
+.err li{margin-bottom:8px}
+svg text{font:12px Inter,sans-serif;fill:var(--muted)}
+.ax{stroke:var(--line)}.grid{stroke:var(--line);stroke-dasharray:2 4}
+footer{color:var(--muted);font-size:14px}
+pre,.scroll{overflow-x:auto}code{overflow-wrap:anywhere;font-size:.92em}
+@media(max-width:860px){.lab,.cols{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start;white-space:normal}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--muted);font-weight:600}.stack td:empty{display:none}.read b{font-size:18px}}
+</style><script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+
+<header class="band top"><div class="wrap">
+  <h1>Una perilla mueve todas las métricas</h1>
+  <p class="lede">Guía de métricas de clasificación: de la matriz de confusión a la curva ROC, y cuándo usar cada una. Mueva el umbral y mire cómo cambian a la vez la matriz, las métricas y el punto en la curva.</p>
+
+  <div class="lab">
+    <div class="card">
+      <h3>Las notas que el modelo le pone a cada cliente</h3>
+      <div class="fig" id="hist"></div>
+      <div class="knob">
+        <label for="t">Umbral</label>
+        <input type="range" id="t" min="1" max="99" value="50" aria-describedby="tdesc">
+        <span class="tval" id="tv">0,50</span>
+      </div>
+      <div class="presets" aria-label="Umbrales de referencia">
+        <button data-k="70">0,7</button><button data-k="50">0,5</button><button data-k="30">0,3</button><button data-k="20">0,2</button><button data-k="10">0,1</button>
+      </div>
+      <p class="note" id="tdesc">Barras rojas hacia arriba: clientes que sí abrieron el depósito. Azules hacia abajo: los que no. Todo lo que queda a la derecha del umbral se llama.</p>
+    </div>
+    <div class="card">
+      <h3>Matriz de confusión</h3>
+      <div class="cm" aria-live="polite">
+        <div></div><div class="h">Modelo: sí (llamo)</div><div class="h">Modelo: no (no llamo)</div>
+        <div class="h rh">Realidad: sí</div>
+        <div class="cell vp"><small>Verdaderos positivos<br>llamé y dijo sí</small><b id="cVP"></b></div>
+        <div class="cell fn"><small>Falsos negativos<br>no llamé y era un sí</small><b id="cFN"></b></div>
+        <div class="h rh">Realidad: no</div>
+        <div class="cell fp"><small>Falsos positivos<br>llamé en vano</small><b id="cFP"></b></div>
+        <div class="cell vn"><small>Verdaderos negativos<br>no llamé y era un no</small><b id="cVN"></b></div>
+      </div>
+      <div class="read">
+        <div><span>Accuracy</span><b id="rAcc"></b></div>
+        <div><span>Precisión</span><b id="rPre"></b></div>
+        <div><span>Recall</span><b id="rRec"></b></div>
+        <div><span>Tasa de falsos positivos</span><b id="rFpr"></b></div>
+        <div><span>F1</span><b id="rF1"></b></div>
+        <div><span>Llamadas</span><b id="rCalls"></b></div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px">Datos reales del curso: regresión logística de la Sesión 5 sobre Bank Marketing (sin <code>duration</code>), conjunto de prueba de 9 043 clientes, 1 058 dijeron sí (11,7 %). Las notas se agrupan en franjas de 0,01.</p>
+</div></header>
+
+<nav class="scroll" aria-label="Secciones">
+  <a href="#matriz">Matriz</a><a href="#metricas">Métricas</a><a href="#perilla">El umbral</a><a href="#roc">Curva ROC</a><a href="#auc">AUC</a><a href="#pr">Curva PR</a><a href="#negocio">Negocio</a><a href="#guia">Cuándo usar cuál</a><a href="#elegir">¿Cuál uso?</a>
+</nav>
+
+<main>
+<section class="band" id="matriz"><div class="wrap cols">
+  <div>
+    <h2>Todo empieza en cuatro casillas</h2>
+    <p>El modelo no responde "sí" o "no": le da a cada cliente una <b>probabilidad</b>, una nota entre 0 y 1. El <b>umbral</b> convierte esa nota en una decisión: si la nota es mayor o igual al umbral, lo llamamos.</p>
+    <p>Al cruzar lo que decidimos con lo que de verdad pasó salen cuatro casos. Esa tabla de 2×2 es la <b>matriz de confusión</b>, y <b>todas</b> las métricas de esta guía son cuentas hechas con sus cuatro números.</p>
+    <p>Positivo y negativo no significan bueno y malo: <b>positivo</b> es la clase que buscamos (el "sí", el fraude, el enfermo) y <b>negativo</b> la otra. Verdadero o falso dice si el modelo acertó.</p>
+  </div>
+  <div class="card">
+    <h3>Cómo leer cada casilla</h3>
+    <p><span class="chip c-vp">VP</span> Llamé y dijo sí. Lo que buscamos.</p>
+    <p><span class="chip c-fn">FN</span> No llamé y sí iba a abrir el depósito. Un cliente <b>perdido</b>: no aparece en ninguna factura, por eso se olvida.</p>
+    <p><span class="chip c-fp">FP</span> Llamé y dijo no. Una llamada <b>en vano</b>: cuesta tiempo y plata.</p>
+    <p><span class="chip c-vn">VN</span> No llamé y era un no. Acierto silencioso.</p>
+    <p class="note">Ojo: scikit-learn imprime la matriz con las filas y columnas en el orden 0, 1 (primero el "no"). Aquí va primero el "sí" para leerla como una lista de llamadas. Siempre revise qué es fila y qué es columna.</p>
+  </div>
+</div></section>
+
+<section class="band" id="metricas" style="background:var(--steel)"><div class="wrap">
+  <h2>Cada métrica es una pregunta distinta</h2>
+  <p>Las fórmulas usan las casillas de la matriz. Los valores cambian con el umbral que eligió arriba (<b id="tv2">0,50</b>).</p>
+  <div class="metrics" id="mcards"></div>
+  <div class="callout">
+    <h3>La accuracy que miente</h3>
+    <p>Un modelo perezoso que dice "no" a todo el mundo, sin mirar a nadie, saca <b>accuracy 0,883</b>: acierta los 7 985 "no". Pero su recall es <b>0</b>: no encuentra a ninguno de los 1 058 clientes que buscamos. Con el umbral actual, la logística saca accuracy <b id="accNow"></b>. Si la accuracy apenas le gana a la línea base, no está diciendo nada útil.</p>
+  </div>
+</div></section>
+
+<section class="band" id="perilla"><div class="wrap cols">
+  <div>
+    <h2>Bajar el umbral es llamar a más gente</h2>
+    <p>Imagine la lista de clientes ordenada de la nota más alta a la más baja. El umbral es hasta dónde de esa lista decide llamar.</p>
+    <p><b>Umbral alto</b>: llama a pocos y casi todos dicen sí. Precisión alta, recall bajo.</p>
+    <p><b>Umbral bajo</b>: llama a muchos, encuentra más "sí" pero también molesta a más "no". Recall alto, precisión baja.</p>
+    <p>Precisión y recall tiran en sentido contrario: no se pueden subir las dos moviendo solo el umbral. Para subir las dos hace falta un <b>mejor modelo</b>. El F1 resume el balance entre ambas y tiene un máximo en algún punto intermedio.</p>
+    <p class="note">La línea vertical es su umbral. El rombo marca el umbral que maximiza el F1 en estos datos.</p>
+  </div>
+  <div class="card"><div class="fig" id="tradeoff"></div>
+    <p class="note" id="legT"></p></div>
+</div></section>
+
+<section class="band" id="roc" style="background:var(--steel)"><div class="wrap cols">
+  <div class="card"><div class="fig sq" id="rocfig"></div></div>
+  <div>
+    <h2>La curva ROC: todos los umbrales a la vez</h2>
+    <p>Cada umbral produce dos números: cuántos "sí" encuentro (<b>recall</b>, eje vertical) y a cuántos "no" molesto (<b>tasa de falsos positivos</b>, eje horizontal). Cada umbral es un punto; la curva los une todos, desde no llamar a nadie (esquina de abajo a la izquierda) hasta llamar a todo el mundo (esquina de arriba a la derecha).</p>
+    <p><b>La diagonal es llamar al azar.</b> Si marca números sin orden, cuando haya molestado al 30 % de los "no" también habrá encontrado más o menos al 30 % de los "sí". Un modelo sirve en la medida en que su curva se despega hacia arriba de esa línea.</p>
+    <p><b>La esquina de arriba a la izquierda es el modelo perfecto</b>: todos los "sí" sin molestar a ningún "no". La curva de la logística sube empinada al principio porque los primeros de la lista son casi todos "sí".</p>
+    <p class="note">El punto rojo es su umbral actual: <span id="rocnow"></span>.</p>
+  </div>
+</div></section>
+
+<section class="band" id="auc"><div class="wrap cols">
+  <div>
+    <h2>El AUC es un juego de parejas</h2>
+    <p>El <b>AUC</b> (área bajo la curva) resume toda la curva en un número. Tiene una lectura muy concreta:</p>
+    <p class="callout" style="margin-top:0">Tome al azar un cliente que dijo <b>sí</b> y uno que dijo <b>no</b>. El AUC es la probabilidad de que el modelo le haya puesto <b>más nota al del sí</b>.</p>
+    <p>0,5 es lanzar una moneda; 1 es ordenar perfecto. La logística saca <b>0,772</b>: ordena bien en 77 de cada 100 parejas. No depende del umbral ni de que la mayoría sea "no": mide qué tan bien <b>ordena</b> el modelo.</p>
+    <p>Pruébelo: saque parejas y mire cómo el porcentaje de aciertos se acerca al área.</p>
+  </div>
+  <div class="card">
+    <div class="pair">
+      <div style="background:var(--si2)"><span>Cliente que dijo sí</span><b id="pSi">—</b></div>
+      <div style="background:var(--no2)"><span>Cliente que dijo no</span><b id="pNo">—</b></div>
+    </div>
+    <p id="pMsg" aria-live="polite" style="min-height:3em">Saque una pareja para empezar.</p>
+    <div class="presets"><button id="b1">Sacar una pareja</button><button id="b100">Sacar 100</button><button id="b1000">Sacar 1 000</button><button id="b0">Reiniciar</button></div>
+    <p style="margin-top:14px">Parejas bien ordenadas: <span class="big" id="pRate">—</span></p>
+    <p class="note" id="pCount">0 parejas</p>
+    <p class="note">Área bajo la curva de esta página: <b id="aucBins"></b> (las notas van en franjas de 0,01; con las probabilidades exactas da 0,772).</p>
+  </div>
+</div></section>
+
+<section class="band" id="pr" style="background:var(--steel)"><div class="wrap cols">
+  <div>
+    <h2>Cuando el "sí" es raro: la curva precisión–recall</h2>
+    <p>La ROC divide los falsos positivos entre <b>todos</b> los "no". Si los "no" son muchísimos (fraude con 0,5 % de casos, por ejemplo), miles de llamadas en vano apenas mueven el eje horizontal y la curva se ve optimista.</p>
+    <p>La curva <b>precisión–recall</b> pone en el eje vertical la precisión: de los que llamé, cuántos dijeron sí. Esa cuenta sí siente cada llamada en vano. Su línea de azar no es la diagonal sino la proporción de "sí" (aquí 0,117). Su área se llama <b>AP</b> (precisión promedio).</p>
+    <p>Con el 11,7 % de Bank Marketing la ROC funciona bien. Por debajo de un 5 % de positivos, mire también esta curva.</p>
+  </div>
+  <div class="card"><div class="fig sq" id="prfig"></div><p class="note" id="apnote"></p></div>
+</div></section>
+
+<section class="band" id="negocio"><div class="wrap cols">
+  <div>
+    <h2>El umbral lo decide el negocio, no la curva</h2>
+    <p>La curva ROC muestra el menú de umbrales; no dice cuál pedir. Si conoce cuánto cuesta cada error, puede calcular la ganancia de cada umbral y quedarse con la mejor. Es la tabla de ganancia de la Sesión 5.</p>
+    <p class="q">Escenarios listos:</p>
+    <div class="presets" id="esc" style="margin-bottom:12px">
+      <button data-c="20000" data-g="100000">A. Asesor del banco</button>
+      <button data-c="10000" data-g="100000">B. Call center tercerizado</button>
+      <button data-c="2000" data-g="100000">C. Bot de WhatsApp</button>
+      <button data-c="20000" data-g="300000">D. Producto más rentable</button>
+    </div>
+    <div class="inputs">
+      <label>Costo por llamada (COP)<input type="number" id="cCall" value="20000" min="0" step="1000"></label>
+      <label>Ganancia por depósito (COP)<input type="number" id="cGain" value="100000" min="0" step="5000"></label>
+    </div>
+    <p>Ganancia = ganancia por depósito × VP − costo por llamada × (VP + FP).</p>
+    <p id="profitTxt" aria-live="polite"></p>
+    <div class="callout"><h3>La regla escondida: umbral ≈ costo ÷ ganancia</h3>
+    <p>Vale la pena llamar a un cliente si lo que espero ganar supera lo que cuesta llamarlo: probabilidad × ganancia &gt; costo, es decir, <b>probabilidad &gt; costo ÷ ganancia</b>. <span id="regla"></span></p>
+    <p class="note" style="margin:0">Funciona cuando las probabilidades son confiables (calibradas), como las de la logística normal. No sirve con la logística balanceada, que infla a propósito las probabilidades del "sí", ni con notas gruesas como las de k-NN o un árbol sin límite. El escenario C supone que un mensaje de bot convence igual que un asesor; en la vida real convierte menos.</p></div>
+    <div class="scroll"><table id="escTab" style="margin-top:8px"></table></div>
+    <p class="note">Elegir el umbral mirando el conjunto de prueba es hacer trampa: en un proyecto real se elige con validación (o validación cruzada) y la prueba se mira una sola vez.</p>
+  </div>
+  <div class="card"><div class="fig" id="profit"></div></div>
+</div></section>
+
+<section class="band" id="guia" style="background:var(--steel)"><div class="wrap">
+  <h2>Cuándo usar cada métrica, y cuándo no</h2>
+  <div class="scroll">
+  <table class="stack">
+    <thead><tr><th>Métrica</th><th>Responde</th><th>Úsela cuando</th><th>No la use cuando</th><th>Ejemplo</th></tr></thead>
+    <tbody id="gtab"></tbody>
+  </table>
+  </div>
+  <h3 style="margin-top:28px">Errores comunes</h3>
+  <ul class="err">
+    <li><b>Reportar solo la accuracy con clases desbalanceadas.</b> Compárela siempre con la línea base que dice la clase mayoritaria.</li>
+    <li><b>Medir en entrenamiento.</b> Un árbol sin límite o un k-NN con k = 1 sacan 1,00 ahí. Las métricas que cuentan se miden en datos que el modelo no vio.</li>
+    <li><b>Elegir el umbral con el conjunto de prueba.</b> Se elige en validación; la prueba es el examen final.</li>
+    <li><b>Usar el AUC para decidir a quién llamar.</b> El AUC compara modelos; la decisión necesita un umbral y, ojalá, costos.</li>
+    <li><b>Un AUC sospechosamente alto.</b> Como el 0,93 con <code>duration</code> en la Sesión 6: antes de celebrar, busque fuga de información.</li>
+    <li><b>Mirar recall o precisión solos.</b> Llamar a todos da recall 1; llamar a uno solo puede dar precisión 1. Van en pareja.</li>
+  </ul>
+</div></section>
+
+<section class="band" id="elegir"><div class="wrap cols">
+  <form class="quiz" id="quiz">
+    <h2>¿Qué métrica uso?</h2>
+    <fieldset><legend>1. ¿Qué necesita hacer?</legend>
+      <label><input type="radio" name="g" value="cmp" checked> Comparar modelos entre sí</label>
+      <label><input type="radio" name="g" value="thr"> Decidir a quién marcar (elegir el umbral)</label>
+      <label><input type="radio" name="g" value="rep"> Contarle el resultado a alguien de negocio</label>
+    </fieldset>
+    <fieldset><legend>2. ¿Qué tan común es la clase que busca?</legend>
+      <label><input type="radio" name="b" value="bal"> Parecida a la otra (entre 35 % y 65 %)</label>
+      <label><input type="radio" name="b" value="des" checked> Minoritaria (5 % a 35 %), como Bank Marketing</label>
+      <label><input type="radio" name="b" value="rara"> Muy rara (menos de 5 %), como fraude</label>
+    </fieldset>
+    <fieldset><legend>3. ¿Qué error duele más?</legend>
+      <label><input type="radio" name="e" value="fn"> Dejar escapar un positivo (FN)</label>
+      <label><input type="radio" name="e" value="fp"> Una falsa alarma (FP)</label>
+      <label><input type="radio" name="e" value="igual" checked> Más o menos lo mismo</label>
+      <label><input type="radio" name="e" value="plata"> Conozco el costo de cada uno en plata</label>
+    </fieldset>
+  </form>
+  <div id="rec" aria-live="polite"></div>
+</div></section>
+</main>
+
+<footer class="band"><div class="wrap">
+  <p>Curso Introducción al Análisis Avanzado de Datos con Python · Univalle · Módulos 2 y 4. Datos: Bank Marketing (Moro, Cortez y Rita, 2014; UCI Machine Learning Repository), modelo de la Sesión 5.</p>
+</div></footer>
+
+<script>
+{
+const POS=[0,9,30,19,19,34,39,46,54,50,46,45,41,37,31,31,14,21,13,14,15,9,12,15,8,14,12,10,14,4,11,8,12,5,7,8,11,4,14,8,6,8,6,5,8,9,10,7,5,10,9,6,6,5,9,2,7,7,5,7,6,5,5,7,1,3,1,4,2,4,5,1,6,4,6,4,1,3,3,6,7,5,5,5,5,7,4,3,3,1,2,3,0,0,0,0,0,0,0,0];
+const NEG=[42,338,828,597,516,537,667,629,604,526,438,406,375,248,197,162,117,80,77,67,49,42,37,24,21,19,19,20,12,8,8,14,5,10,14,9,10,15,6,15,6,4,12,11,9,12,7,4,10,7,3,4,8,5,5,4,2,6,4,3,2,4,3,3,2,2,2,1,0,0,0,2,1,2,1,0,1,1,4,2,1,4,1,1,3,0,1,4,1,0,0,1,1,0,0,0,0,0,0,0];
+const P=POS.reduce((a,b)=>a+b,0),N=NEG.reduce((a,b)=>a+b,0),T=P+N;
+const st=[];
+for(let k=0;k<=100;k++){let tp=0,fp=0;for(let i=k;i<100;i++){tp+=POS[i];fp+=NEG[i]}
+  const fn=P-tp,tn=N-fp,pre=tp+fp?tp/(tp+fp):null,rec=tp/P,f1=(pre&&rec)?2*pre*rec/(pre+rec):0;
+  st.push({k,tp,fp,fn,tn,acc:(tp+tn)/T,pre,rec,fpr:fp/N,spec:tn/N,f1,calls:tp+fp})}
+let auc=0;for(let k=0;k<100;k++)auc+=(st[k].fpr-st[k+1].fpr)*(st[k].rec+st[k+1].rec)/2;
+let ap=0;for(let k=0;k<100;k++){const a=st[k],b=st[k+1];if(b.pre!=null)ap+=(a.rec-b.rec)*b.pre;else ap+=(a.rec-b.rec)*a.pre}
+let bestF1=1;for(let k=1;k<100;k++)if(st[k].f1>st[bestF1].f1)bestF1=k;
+const $=id=>document.getElementById(id);
+const f=(x,d=3)=>x==null||isNaN(x)?'—':x.toFixed(d).replace('.',',');
+const n=x=>Math.round(x).toLocaleString('es-CO').replace(/\./g,'\u202f');
+const pc=x=>x==null?'—':(x*100).toFixed(1).replace('.',',')+' %';
+let K=50;
+
+const svgEl=(box,html)=>{let s=box.querySelector('svg');if(!s){s=document.createElementNS('http://www.w3.org/2000/svg','svg');box.appendChild(s)}s.innerHTML=html;return s};
+const small=w=>w<520;
+
+function drawHist(){
+  const box=$('hist'),W=box.clientWidth,H=box.clientHeight;if(W<60)return;const m={l:small(W)?28:40,r:10,t:18,b:28},iw=W-m.l-m.r,ih=H-m.t-m.b,mid=m.t+ih/2;
+  const sp=POS.map(v=>v/P),sn=NEG.map(v=>v/N),mx=Math.max(...sp,...sn);
+  const x=i=>m.l+i/100*iw,h=v=>v/mx*(ih/2-4),bw=iw/100;
+  let o=`<rect x="${x(K)}" y="${m.t}" width="${x(100)-x(K)}" height="${ih}" style="fill:var(--steel);opacity:.55"/>`;
+  o+=`<text x="${x(K)+6}" y="${m.t+12}" style="fill:var(--ink);font-weight:600">se llama</text>`;
+  for(let i=0;i<100;i++){const a=i>=K?1:.4;
+    o+=`<rect x="${x(i)}" y="${mid-h(sp[i])}" width="${Math.max(bw-.6,.5)}" height="${h(sp[i])}" style="fill:var(--si);opacity:${a}"/>`;
+    o+=`<rect x="${x(i)}" y="${mid}" width="${Math.max(bw-.6,.5)}" height="${h(sn[i])}" style="fill:var(--no);opacity:${a}"/>`}
+  o+=`<line class="ax" x1="${m.l}" x2="${m.l+iw}" y1="${mid}" y2="${mid}"/>`;
+  o+=`<text x="${x(30)}" y="${m.t+12}" style="fill:var(--si)">sí ↑</text><text x="${x(30)}" y="${m.t+ih-4}" style="fill:var(--no)">no ↓</text>`;
+  for(const t of [0,.25,.5,.75,1])o+=`<text x="${x(t*100)}" y="${H-8}" text-anchor="middle">${f(t,2)}</text>`;
+  o+=`<line x1="${x(K)}" x2="${x(K)}" y1="${m.t-6}" y2="${m.t+ih}" style="stroke:var(--ink);stroke-width:2.5"/>`;
+  svgEl(box,o)}
+
+function axes(W,H,m,xl,yl,xs,ys){let o='';
+  for(const t of [0,.2,.4,.6,.8,1]){const X=xs(t),Y=ys(t);o+=`<line class="grid" x1="${X}" x2="${X}" y1="${ys(0)}" y2="${ys(1)}"/><line class="grid" x1="${xs(0)}" x2="${xs(1)}" y1="${Y}" y2="${Y}"/>`;
+    if(!small(W)||t%0.4<1e-9||t===1){o+=`<text x="${X}" y="${ys(0)+16}" text-anchor="middle">${f(t,1)}</text><text x="${xs(0)-6}" y="${Y+4}" text-anchor="end">${f(t,1)}</text>`}}
+  o+=`<text x="${(xs(0)+xs(1))/2}" y="${H-4}" text-anchor="middle">${xl}</text>`;
+  o+=`<text transform="translate(12 ${(ys(0)+ys(1))/2}) rotate(-90)" text-anchor="middle">${yl}</text>`;return o}
+
+function drawTrade(){
+  const box=$('tradeoff'),W=box.clientWidth,H=box.clientHeight;if(W<60)return;const m={l:44,r:12,t:12,b:40};
+  const xs=t=>m.l+t*(W-m.l-m.r),ys=v=>m.t+(1-v)*(H-m.t-m.b);
+  let o=axes(W,H,m,'umbral','valor',xs,ys);
+  const line=(key,col,dash)=>{let d='';for(let k=1;k<100;k++){const v=st[k][key];if(v==null||(key==='pre'&&st[k].calls<15))continue;d+=(d?'L':'M')+xs(k/100).toFixed(1)+','+ys(v).toFixed(1)}return `<path d="${d}" fill="none" style="stroke:${col};stroke-width:2.5;${dash?'stroke-dasharray:6 4':''}"/>`};
+  o+=line('rec','var(--si)')+line('pre','var(--no)')+line('f1','var(--ink)',1);
+  o+=`<line x1="${xs(K/100)}" x2="${xs(K/100)}" y1="${ys(1)}" y2="${ys(0)}" style="stroke:var(--ink);stroke-width:1.5"/>`;
+  const b=st[bestF1];o+=`<rect x="${xs(bestF1/100)-6}" y="${ys(b.f1)-6}" width="12" height="12" transform="rotate(45 ${xs(bestF1/100)} ${ys(b.f1)})" style="fill:var(--ink)"/>`;
+  svgEl(box,o);
+  const s=st[K];$('legT').innerHTML=`<span style="color:var(--si);font-weight:600">Recall ${f(s.rec)}</span> · <span style="color:var(--no);font-weight:600">Precisión ${f(s.pre)}</span> · <b>F1 ${f(s.f1)}</b> (línea punteada). F1 máximo ${f(b.f1)} con umbral ${f(bestF1/100,2)}.`}
+
+function drawROC(){
+  const box=$('rocfig'),W=box.clientWidth,H=box.clientHeight;if(W<60)return;const m={l:44,r:12,t:12,b:40};
+  const xs=v=>m.l+v*(W-m.l-m.r),ys=v=>m.t+(1-v)*(H-m.t-m.b);
+  let o=axes(W,H,m,small(W)?'falsos positivos (llamé en vano)':'tasa de falsos positivos: de los "no", a cuántos llamo','recall: de los "sí", cuántos encuentro',xs,ys);
+  let d='',area=`M${xs(0)},${ys(0)}`;for(let k=100;k>=0;k--){const p=st[k];const c=xs(p.fpr).toFixed(1)+','+ys(p.rec).toFixed(1);d+=(d?'L':'M')+c;area+='L'+c}
+  area+=`L${xs(1)},${ys(0)}Z`;
+  o+=`<path d="${area}" style="fill:var(--si);opacity:.08"/>`;
+  o+=`<line x1="${xs(0)}" y1="${ys(0)}" x2="${xs(1)}" y2="${ys(1)}" style="stroke:var(--muted);stroke-dasharray:6 5;stroke-width:1.5"/>`;
+  o+=`<text x="${xs(.62)}" y="${ys(.55)}" text-anchor="middle" transform="rotate(${-Math.atan2(ys(1)-ys(0),xs(1)-xs(0))*-180/Math.PI} ${xs(.62)} ${ys(.55)})">azar</text>`;
+  o+=`<path d="${d}" fill="none" style="stroke:var(--ink);stroke-width:2.5"/>`;
+  for(const k of [70,50,30,20,10]){const p=st[k];o+=`<circle cx="${xs(p.fpr)}" cy="${ys(p.rec)}" r="3.5" style="fill:var(--panel);stroke:var(--ink)"/>`;if(!small(W))o+=`<text x="${xs(p.fpr)+8}" y="${ys(p.rec)+14}">${f(k/100,1)}</text>`}
+  const p=st[K];o+=`<circle cx="${xs(p.fpr)}" cy="${ys(p.rec)}" r="8" style="fill:var(--si);stroke:var(--panel);stroke-width:2"/>`;
+  o+=`<text x="${xs(.98)}" y="${ys(.06)}" text-anchor="end" style="fill:var(--ink);font-weight:600">AUC ${f(auc)}</text>`;
+  svgEl(box,o);
+  $('rocnow').textContent=`umbral ${f(K/100,2)}: encuentra el ${pc(p.rec)} de los "sí" molestando al ${pc(p.fpr)} de los "no"`}
+
+function drawPR(){
+  const box=$('prfig'),W=box.clientWidth,H=box.clientHeight;if(W<60)return;const m={l:44,r:12,t:12,b:40};
+  const xs=v=>m.l+v*(W-m.l-m.r),ys=v=>m.t+(1-v)*(H-m.t-m.b);
+  let o=axes(W,H,m,'recall: de los "sí", cuántos encuentro','precisión: de los llamados, cuántos sí',xs,ys);
+  const base=P/T;o+=`<line x1="${xs(0)}" x2="${xs(1)}" y1="${ys(base)}" y2="${ys(base)}" style="stroke:var(--muted);stroke-dasharray:6 5;stroke-width:1.5"/><text x="${xs(.5)}" y="${ys(base)+16}" text-anchor="middle">azar (${f(base)})</text>`;
+  let d='';for(let k=99;k>=0;k--){const p=st[k];if(p.pre==null||p.tp<5)continue;d+=(d?'L':'M')+xs(p.rec).toFixed(1)+','+ys(p.pre).toFixed(1)}
+  o+=`<path d="${d}" fill="none" style="stroke:var(--ink);stroke-width:2.5"/>`;
+  const p=st[K];if(p.pre!=null)o+=`<circle cx="${xs(p.rec)}" cy="${ys(p.pre)}" r="8" style="fill:var(--si);stroke:var(--panel);stroke-width:2"/>`;
+  svgEl(box,o);
+  $('apnote').textContent=`AP ≈ ${f(ap)}, contra ${f(base)} del azar. El punto rojo es su umbral ${f(K/100,2)}.`}
+
+function profitOf(k){const c=+$('cCall').value||0,g=+$('cGain').value||0,s=st[k];return g*s.tp-c*s.calls}
+const M=v=>(v/1e6).toFixed(1).replace('.',',')+' M';
+function drawProfit(){
+  const box=$('profit'),W=box.clientWidth,H=box.clientHeight;if(W<60)return;const m={l:small(W)?44:56,r:12,t:16,b:40};
+  const vals=[];for(let k=0;k<=99;k++)vals.push(profitOf(k));
+  let best=0;vals.forEach((v,i)=>{if(v>vals[best])best=i});
+  const step=[5e6,10e6,20e6,25e6,50e6,100e6,200e6,500e6,1e9].find(s=>s*5>=Math.max(...vals.map(Math.abs)))||1e9;const lo=Math.floor(Math.min(0,...vals)/step)*step,hi=Math.ceil(Math.max(0,...vals)/step)*step,span=hi-lo||1;
+  const xs=t=>m.l+t*(W-m.l-m.r),ys=v=>m.t+(1-(v-lo)/span)*(H-m.t-m.b);
+  let o='';for(let v=lo;v<=hi+1;v+=step){o+=`<line class="grid" x1="${xs(0)}" x2="${xs(1)}" y1="${ys(v)}" y2="${ys(v)}"/><text x="${xs(0)-6}" y="${ys(v)+4}" text-anchor="end">${M(v)}</text>`}
+  for(const t of [0,.2,.4,.6,.8,1])o+=`<text x="${xs(t)}" y="${H-22}" text-anchor="middle">${f(t,1)}</text>`;
+  o+=`<text x="${(xs(0)+xs(1))/2}" y="${H-4}" text-anchor="middle">umbral (0 = llamar a todos)</text>`;
+  o+=`<line x1="${xs(0)}" x2="${xs(1)}" y1="${ys(0)}" y2="${ys(0)}" style="stroke:var(--ink)"/>`;
+  let d='';vals.forEach((v,k)=>d+=(k?'L':'M')+xs(k/100).toFixed(1)+','+ys(v).toFixed(1));
+  o+=`<path d="${d}" fill="none" style="stroke:var(--no);stroke-width:2.5"/>`;
+  o+=`<rect x="${xs(best/100)-6}" y="${ys(vals[best])-6}" width="12" height="12" transform="rotate(45 ${xs(best/100)} ${ys(vals[best])})" style="fill:var(--ink)"/>`;
+  o+=`<circle cx="${xs(K/100)}" cy="${ys(vals[K])}" r="8" style="fill:var(--si);stroke:var(--panel);stroke-width:2"/>`;
+  svgEl(box,o);
+  const c=+$('cCall').value||0,g=+$('cGain').value||0;
+  $('regla').innerHTML=g?`Con estos costos: ${n(c)} ÷ ${n(g)} = <b>${f(c/g,2)}</b>; el mejor umbral encontrado en los datos es <b>${f(best/100,2)}</b>.`:'';
+  document.querySelectorAll('#esc button').forEach(b=>b.classList.toggle('on',+b.dataset.c===c&&+b.dataset.g===g));
+  $('profitTxt').innerHTML=`Con su umbral <b>${f(K/100,2)}</b>: ${n(st[K].calls)} llamadas, ${n(st[K].tp)} depósitos, ganancia <b>${M(vals[K])} COP</b>. El mejor umbral con estos costos es <b>${f(best/100,2)}</b> (rombo), con <b>${M(vals[best])} COP</b>. Llamar a todos da ${M(vals[0])} COP.`}
+
+const MET=[
+ {n:'Accuracy',q:'¿Qué fracción de clientes clasifiqué bien?',fx:'(<span class="chip c-vp">VP</span> + <span class="chip c-vn">VN</span>) / total',v:s=>s.acc},
+ {n:'Precisión',q:'De los que llamé, ¿cuántos dijeron sí?',fx:'<span class="chip c-vp">VP</span> / (<span class="chip c-vp">VP</span> + <span class="chip c-fp">FP</span>)',v:s=>s.pre},
+ {n:'Recall (sensibilidad)',q:'De todos los que iban a decir sí, ¿a cuántos encontré?',fx:'<span class="chip c-vp">VP</span> / (<span class="chip c-vp">VP</span> + <span class="chip c-fn">FN</span>)',v:s=>s.rec},
+ {n:'Especificidad',q:'De todos los "no", ¿a cuántos dejé tranquilos?',fx:'<span class="chip c-vn">VN</span> / (<span class="chip c-vn">VN</span> + <span class="chip c-fp">FP</span>)',v:s=>s.spec},
+ {n:'Tasa de falsos positivos',q:'De todos los "no", ¿a cuántos molesté en vano?',fx:'<span class="chip c-fp">FP</span> / (<span class="chip c-fp">FP</span> + <span class="chip c-vn">VN</span>) = 1 − especificidad',v:s=>s.fpr},
+ {n:'F1',q:'¿Qué tan buenos son precisión y recall juntos?',fx:'2 · precisión · recall / (precisión + recall)',v:s=>s.f1}];
+function cards(){const s=st[K];$('mcards').innerHTML=MET.map(m=>{const v=m.v(s);return `<div class="card m"><h3><span>${m.n}</span><b>${f(v)}</b></h3><p class="q">${m.q}</p><div class="f">${m.fx}</div><div class="bar"><i style="width:${(v||0)*100}%"></i></div></div>`}).join('')}
+
+function update(){
+  const s=st[K];$('t').value=K;$('tv').textContent=$('tv2').textContent=f(K/100,2);
+  $('cVP').textContent=n(s.tp);$('cFN').textContent=n(s.fn);$('cFP').textContent=n(s.fp);$('cVN').textContent=n(s.tn);
+  $('rAcc').textContent=f(s.acc);$('rPre').textContent=f(s.pre);$('rRec').textContent=f(s.rec);$('rFpr').textContent=f(s.fpr);$('rF1').textContent=f(s.f1);$('rCalls').textContent=n(s.calls);
+  $('accNow').textContent=f(s.acc);
+  document.querySelectorAll('.presets [data-k]').forEach(b=>b.classList.toggle('on',+b.dataset.k===K));
+  cards();drawAll()}
+function drawAll(){drawHist();drawTrade();drawROC();drawPR();drawProfit()}
+
+$('t').addEventListener('input',e=>{K=+e.target.value;update()});
+document.querySelectorAll('.presets [data-k]').forEach(b=>b.addEventListener('click',()=>{K=+b.dataset.k;update()}));
+['cCall','cGain'].forEach(id=>$(id).addEventListener('input',drawProfit));
+document.querySelectorAll('#esc button').forEach(b=>b.addEventListener('click',()=>{$('cCall').value=b.dataset.c;$('cGain').value=b.dataset.g;drawProfit()}));
+{const BAL={tp:659,calls:2469},rows=[...document.querySelectorAll('#esc button')].map(b=>{const c=+b.dataset.c,g=+b.dataset.g,pr=s=>g*s.tp-c*s.calls;let bk=1;for(let k=1;k<100;k++)if(pr(st[k])>pr(st[bk]))bk=k;
+  const m2=v=>(v/1e6).toFixed(1).replace('.',',');return `<tr><td>${b.textContent}</td><td>${m2(pr(st[0]))}</td><td>${m2(pr(st[50]))}</td><td>${m2(pr(st[20]))}</td><td>${m2(pr(BAL))}</td><td><b>${f(bk/100,2)}</b> → ${m2(pr(st[bk]))}</td><td>${f(c/g,2)}</td></tr>`}).join('');
+ $('escTab').innerHTML=`<thead><tr><th>Escenario (millones COP)</th><th>Llamar a todos</th><th>Umbral 0,5</th><th>Umbral 0,2</th><th>Balanceada</th><th>Mejor umbral</th><th>Costo ÷ ganancia</th></tr></thead><tbody>${rows}</tbody>`}
+const ro=new ResizeObserver(drawAll);['hist','tradeoff','rocfig','prfig','profit'].forEach(id=>ro.observe($(id)));
+
+// juego de parejas
+const cum=a=>{let c=0;return a.map(v=>c+=v)},CP=cum(POS),CN=cum(NEG);
+const draw1=(C,tot)=>{const r=Math.random()*tot;let i=0;while(C[i]<=r)i++;return (i+Math.random())/100};
+let good=0,tot=0;
+function play(times){let a,b;for(let j=0;j<times;j++){a=draw1(CP,P);b=draw1(CN,N);tot++;if(a>b)good++}
+  $('pSi').textContent=f(a,2);$('pNo').textContent=f(b,2);
+  $('pMsg').textContent=times===1?(a>b?'Bien ordenada: el modelo le puso más nota al cliente que sí abrió el depósito.':'Mal ordenada: el cliente que dijo no quedó por encima en la lista.'):`Última de ${n(times)} parejas: ${a>b?'bien':'mal'} ordenada.`;
+  $('pRate').textContent=f(good/tot);$('pCount').textContent=`${n(good)} bien ordenadas de ${n(tot)} parejas`}
+$('b1').onclick=()=>play(1);$('b100').onclick=()=>play(100);$('b1000').onclick=()=>play(1000);
+$('b0').onclick=()=>{good=tot=0;$('pSi').textContent=$('pNo').textContent=$('pRate').textContent='—';$('pCount').textContent='0 parejas';$('pMsg').textContent='Saque una pareja para empezar.'};
+$('aucBins').textContent=f(auc);
+
+// guía
+const G=[
+ ['Accuracy','¿Qué fracción acerté en total?','Clases de tamaño parecido y errores que cuestan más o menos lo mismo.','Hay desbalance: en Bank Marketing decir "no" a todos da 0,883. Tampoco sirve en fraude o enfermedades raras.','Clasificar géneros de canciones con tamaños parecidos.'],
+ ['Precisión','De los que marqué como positivos, ¿cuántos lo eran?','Una falsa alarma cuesta: llamar en vano, mandar un correo bueno a spam, bloquear la tarjeta de un cliente honesto.','Se reporta sola: con un umbral muy alto se infla marcando a muy poquitos (umbral 0,5 → precisión 0,67 pero recall 0,18).','Filtro de spam; campaña con presupuesto de llamadas limitado.'],
+ ['Recall','De los positivos reales, ¿cuántos encontré?','Dejar escapar un positivo es caro: tamizaje de una enfermedad, fraude, estudiantes en riesgo de deserción.','Se reporta solo: llamar a todo el mundo da recall 1.','Detectar estudiantes en riesgo de deserción en la U.'],
+ ['Especificidad','De los negativos reales, ¿cuántos dejé tranquilos?','En salud, junto con la sensibilidad (recall), para describir una prueba diagnóstica.','Hay desbalance: casi siempre sale alta y no dice nada de la clase que busca.','Prueba de laboratorio: sensibilidad y especificidad.'],
+ ['F1','¿Qué tan buenos son precisión y recall juntos?','Quiere un solo número con desbalance, a un umbral fijo, y los dos errores importan parecido.','Los costos de FP y FN son muy distintos (use la ganancia o pondere el recall), o quiere comparar modelos sin elegir umbral.','Tabla de modelos en la Sesión 6.'],
+ ['Curva ROC y AUC','¿Qué tan bien ordena el modelo, sin importar el umbral?','Comparar modelos entre sí; reportar la calidad del ordenamiento.','Debe decidir a quién llamar (el AUC no elige umbral). Con positivos muy raros (menos de 5 %) se ve optimista.','Logística 0,772 vs bosque 0,800 en Bank Marketing.'],
+ ['Curva PR y AP','¿Qué tan bien encuentra la clase rara sin llenarse de falsas alarmas?','Positivos muy raros y lo que importa es esa clase: fraude, fallas de máquinas.','Las dos clases importan igual. Tampoco compare AP entre datasets con distinta proporción de positivos.','Transacciones fraudulentas con 0,2 % de casos.'],
+ ['Ganancia o costo','¿Cuánta plata deja cada umbral?','Conoce (o puede estimar con el negocio) cuánto cuesta cada error. Es el criterio final para elegir el umbral.','Los costos son inventados: es mejor reportar precisión y recall que un número de plata falso.','Umbral 0,2 en la Sesión 5: 26,5 M COP.']];
+$('gtab').innerHTML=G.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('');
+
+// ¿cuál uso?
+function rec(){const v=k=>document.querySelector(`input[name=${k}]:checked`).value;const g=v('g'),b=v('b'),e=v('e');const L=[];let t='';
+  if(g==='cmp'){t='Para comparar modelos';
+    if(b==='rara')L.push('<b>AP (curva precisión–recall)</b> como cifra principal, con el AUC al lado.');else L.push('<b>AUC</b> como cifra principal: compara el ordenamiento sin elegir umbral.');
+    if(b==='bal')L.push('La <b>accuracy</b> también vale aquí, porque las clases son parecidas.');else L.push('Agregue <b>F1</b> (o recall y precisión) a un umbral razonable; no use accuracy.');
+    L.push('Compare con <b>validación cruzada</b> (Sesión 10), no con un solo split.')}
+  else if(g==='thr'){t='Para elegir el umbral';
+    if(e==='plata')L.push('Calcule la <b>ganancia de cada umbral</b> y quédese con la mejor (como en la sección de negocio).');
+    else if(e==='fn')L.push('Baje el umbral hasta un <b>recall</b> alto, poniendo un piso de precisión que el equipo pueda atender.');
+    else if(e==='fp')L.push('Suba el umbral hasta una <b>precisión</b> alta, con un piso de recall para no quedarse sin casos.');
+    else L.push('Elija el umbral que <b>maximiza el F1</b>.');
+    L.push('Hágalo en <b>validación</b>, no en prueba.');
+    if(b!=='bal')L.push('Olvide el 0,5 por defecto: con desbalance casi nunca es el mejor.')}
+  else{t='Para contárselo a negocio';
+    if(b==='bal'&&e==='igual')L.push('La <b>accuracy</b> se entiende fácil y aquí no engaña.');
+    L.push('Muestre la <b>matriz de confusión</b> en palabras: "de cada 100 clientes que iban a decir sí, encontramos 44".');
+    L.push(e==='fp'?'Hable de <b>precisión</b>: "de cada 100 llamadas, X terminan en depósito".':'Hable de <b>recall</b> y <b>precisión</b> como "encontramos" y "acertamos al llamar".');
+    if(e==='plata')L.push('Traduzca a <b>plata</b>: ganancia del umbral elegido frente a llamar a todos.')}
+  L.push('Siempre al lado: la <b>línea base</b> (decir la clase mayoritaria) y la matriz de confusión.');
+  $('rec').innerHTML=`<h3>${t}</h3><ul>${L.map(x=>`<li>${x}</li>`).join('')}</ul>`}
+$('quiz').addEventListener('change',rec);$('quiz').addEventListener('submit',e=>e.preventDefault());rec();
+
+update();
+}
+</script>
+</body>
+</html>
