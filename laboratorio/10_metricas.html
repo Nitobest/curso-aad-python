@@ -453,24 +453,33 @@ $('gtab').innerHTML=G.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).j
 
 // ¿cuál uso?
 function rec(){const v=k=>document.querySelector(`input[name=${k}]:checked`).value;const g=v('g'),b=v('b'),e=v('e');const L=[];let t='';
+  const errTxt={fn:'dejar escapar un positivo',fp:'una falsa alarma',igual:'los dos errores por igual',plata:'el costo en plata de cada error'}[e];
+  const balTxt={bal:'clases parecidas',des:'clase minoritaria',rara:'clase muy rara'}[b];
   if(g==='cmp'){t='Para comparar modelos';
-    if(b==='rara')L.push('<b>AP (curva precisión–recall)</b> como cifra principal, con el AUC al lado.');else L.push('<b>AUC</b> como cifra principal: compara el ordenamiento sin elegir umbral.');
-    if(b==='bal')L.push('La <b>accuracy</b> también vale aquí, porque las clases son parecidas.');else L.push('Agregue <b>F1</b> (o recall y precisión) a un umbral razonable; no use accuracy.');
+    if(b==='rara')L.push('<b>AP (curva precisión–recall)</b> como cifra principal, con el AUC al lado.');else L.push('<b>AUC</b> como cifra principal: compara qué tan bien ordena cada modelo, sin elegir umbral.');
+    if(b==='bal')L.push('La <b>accuracy</b> también vale aquí, porque las clases son parecidas.');else L.push('No use accuracy: con desbalance, la línea base ya saca una cifra alta.');
+    if(e==='fn')L.push('Como le duele dejar escapar positivos, compare también el <b>recall</b> de cada modelo a un umbral razonable (o el recall que logra con una precisión mínima).');
+    else if(e==='fp')L.push('Como le duelen las falsas alarmas, compare también la <b>precisión</b> de cada modelo (o la precisión que logra con un recall mínimo).');
+    else if(e==='plata')L.push('Como conoce los costos, compare la <b>ganancia máxima</b> de cada modelo, cada uno en su mejor umbral: gana el que más plata deja, no el de mayor AUC.');
+    else L.push('Como los dos errores pesan parecido, agregue el <b>F1</b> de cada modelo a un umbral razonable.');
     L.push('Compare con <b>validación cruzada</b> (Sesión 10), no con un solo split.')}
   else if(g==='thr'){t='Para elegir el umbral';
-    if(e==='plata')L.push('Calcule la <b>ganancia de cada umbral</b> y quédese con la mejor (como en la sección de negocio).');
+    if(e==='plata')L.push('Calcule la <b>ganancia de cada umbral</b> y quédese con la mejor (sección Negocio). Con probabilidades confiables, el mejor umbral queda cerca de <b>costo ÷ ganancia</b>.');
     else if(e==='fn')L.push('Baje el umbral hasta un <b>recall</b> alto, poniendo un piso de precisión que el equipo pueda atender.');
     else if(e==='fp')L.push('Suba el umbral hasta una <b>precisión</b> alta, con un piso de recall para no quedarse sin casos.');
     else L.push('Elija el umbral que <b>maximiza el F1</b>.');
-    L.push('Hágalo en <b>validación</b>, no en prueba.');
-    if(b!=='bal')L.push('Olvide el 0,5 por defecto: con desbalance casi nunca es el mejor.')}
+    if(b==='bal')L.push('Con clases parecidas, el 0,5 por defecto suele ser un punto de partida razonable; aun así, revíselo.');else L.push('Olvide el 0,5 por defecto: con desbalance casi nunca es el mejor.');
+    L.push('Hágalo en <b>validación</b>, no en prueba.')}
   else{t='Para contárselo a negocio';
-    if(b==='bal'&&e==='igual')L.push('La <b>accuracy</b> se entiende fácil y aquí no engaña.');
+    if(b==='bal'&&e==='igual')L.push('La <b>accuracy</b> se entiende fácil y aquí no engaña.');else L.push('No lleve la accuracy sola: con '+balTxt+' o errores de distinto peso, engaña.');
     L.push('Muestre la <b>matriz de confusión</b> en palabras: "de cada 100 clientes que iban a decir sí, encontramos 44".');
-    L.push(e==='fp'?'Hable de <b>precisión</b>: "de cada 100 llamadas, X terminan en depósito".':'Hable de <b>recall</b> y <b>precisión</b> como "encontramos" y "acertamos al llamar".');
-    if(e==='plata')L.push('Traduzca a <b>plata</b>: ganancia del umbral elegido frente a llamar a todos.')}
+    if(e==='fn')L.push('Ponga el foco en el <b>recall</b>: "encontramos X de cada 100 casos", y diga cuántos se escapan.');
+    else if(e==='fp')L.push('Ponga el foco en la <b>precisión</b>: "de cada 100 alertas, X eran de verdad".');
+    else if(e==='plata')L.push('Traduzca a <b>plata</b>: ganancia del umbral elegido frente a no usar modelo (llamar a todos o a nadie).');
+    else L.push('Hable de <b>recall</b> y <b>precisión</b> como "encontramos" y "acertamos".')}
   L.push('Siempre al lado: la <b>línea base</b> (decir la clase mayoritaria) y la matriz de confusión.');
-  $('rec').innerHTML=`<h3>${t}</h3><ul>${L.map(x=>`<li>${x}</li>`).join('')}</ul>`}
+  const r=$('rec');r.innerHTML=`<h3>${t}</h3><p class="note" style="color:inherit;opacity:.75;margin:0 0 10px">Con ${balTxt} y priorizando ${errTxt}.</p><ul>${L.map(x=>`<li>${x}</li>`).join('')}</ul>`;
+  r.animate&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&r.animate([{opacity:.4},{opacity:1}],{duration:300})}
 $('quiz').addEventListener('change',rec);$('quiz').addEventListener('submit',e=>e.preventDefault());rec();
 
 update();
