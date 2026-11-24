@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bootstrap, bagging, bosques y boosting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* VOICE: profesor explicando en vivo, claro y técnico, sin adornos.
+   IDEA: un taller de árboles: muchos árboles votan en paralelo (bosque) o se corrigen en fila (boosting).
+   PICTURE: el laboratorio vivo arriba: la frontera de decisión cambia al sumar árboles.
+   COLOUR and TYPE: acero, negro, blanco; rojo = "sí", pizarra azul = "no", como la guía de métricas. Inter Tight + Inter.
+   LAYOUT: laboratorio a lo ancho, luego secciones en columna con demos vivas, tabla comparativa y código. */
+:root{color-scheme:light dark;
+--bg:light-dark(#f4f6f7,#16191c);--panel:light-dark(#ffffff,#1e2327);--steel:light-dark(#d5dbe0,#2b3238);
+--ink:light-dark(#0d0f11,#eef1f3);--muted:light-dark(#4d5761,#a3aeb7);--line:light-dark(#c3cbd2,#3a434b);
+--si:light-dark(#e8251a,#ff5b4f);--si2:light-dark(#fbd9d6,#4a2220);--no:light-dark(#35556f,#93b4cc);--no2:light-dark(#dbe5ee,#23313d)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:"Inter Tight",Inter,sans-serif;font-weight:700;line-height:1.08;text-wrap:balance;margin:0 0 .5em}
+h1{font-size:clamp(30px,4.4vw,48px)}h2{font-size:clamp(24px,3vw,34px)}h3{font-size:19px;margin-bottom:.35em}
+p{margin:0 0 .9em;max-width:70ch}
+.band{padding:clamp(28px,4vw,60px) max(5vw,16px)}.alt{background:var(--steel)}
+.wrap{max-width:1240px;margin:0 auto}
+.top{background:var(--steel);border-bottom:1px solid var(--line)}
+.lede{color:var(--muted);font-size:17px}
+nav.scroll{display:flex;gap:6px;overflow-x:auto;padding:10px max(5vw,16px);background:var(--ink)}
+nav.scroll a{flex:none;color:var(--bg);text-decoration:none;font-size:14px;padding:8px 12px;border-radius:4px}
+nav.scroll a:hover,nav.scroll a:focus-visible{background:var(--si);color:#fff;outline:none}
+@media(min-width:900px){nav.scroll{position:sticky;top:0;z-index:5}}
+html{scroll-padding-top:72px;scroll-behavior:smooth}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+.lab{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;margin-top:18px}
+.cv{position:relative;width:100%;aspect-ratio:4/3;border-radius:4px;overflow:hidden;background:var(--bg)}
+.cv canvas{position:absolute;inset:0;width:100%;height:100%}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+button{font:600 15px Inter,sans-serif;min-height:44px;padding:0 14px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--ink)}button:focus-visible,input:focus-visible{outline:3px solid var(--si);outline-offset:2px}
+button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.ctl{display:grid;grid-template-columns:9.5em minmax(0,1fr) 3.4em;align-items:center;gap:8px;margin:4px 0}
+.ctl label{font-weight:600;font-size:15px}.ctl output{font:700 18px "Inter Tight",sans-serif;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;height:44px;accent-color:var(--si)}
+.chk{display:flex;align-items:center;gap:8px;min-height:40px;font-size:15px;cursor:pointer}.chk input{width:20px;height:20px;accent-color:var(--si)}
+.read{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.read div{background:var(--bg);border-radius:4px;padding:8px 10px}
+.read span{display:block;font-size:13px;color:var(--muted)}
+.read b{font:700 22px "Inter Tight",sans-serif;font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:8px}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:-1px;margin-right:5px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.callout{border-left:4px solid var(--si);background:var(--panel);padding:14px 16px;border-radius:0 6px 6px 0;margin:16px 0}
+.clients{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;margin:12px 0}
+.cl{border-radius:4px;padding:6px 8px;font-size:14px;position:relative;border:1px solid var(--line);background:var(--panel);transition:opacity .2s}
+.cl.si{border-left:5px solid var(--si)}.cl.no{border-left:5px solid var(--no)}
+.cl.oob{opacity:.35;border-style:dashed}
+.cl i{position:absolute;right:6px;top:5px;font-style:normal;font:700 13px "Inter Tight";background:var(--ink);color:var(--bg);border-radius:10px;padding:0 6px}
+.big{font:700 clamp(32px,5vw,48px)/1 "Inter Tight",sans-serif;font-variant-numeric:tabular-nums}
+.trio{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.trio figure{margin:0}.trio figcaption{font-size:13px;color:var(--muted);margin-top:4px}
+.trio .cv{aspect-ratio:1}
+.fig{position:relative;min-height:320px}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+svg text{font:12px Inter,sans-serif;fill:var(--muted)}.grid{stroke:var(--line);stroke-dasharray:2 4}
+table{border-collapse:collapse;width:100%;font-size:15px;background:var(--panel)}
+th,td{text-align:left;vertical-align:top;padding:10px;border-bottom:1px solid var(--line)}
+th{font-family:"Inter Tight",Inter,sans-serif;background:var(--steel)}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.barc{display:flex;align-items:center;gap:8px}.barc i{display:block;height:10px;background:var(--ink);border-radius:3px}
+.hp{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.hp code{font-weight:600}
+pre{background:var(--ink);color:var(--bg);padding:14px;border-radius:6px;font-size:14px;line-height:1.45;overflow-x:auto;margin:0}
+.code{position:relative}.code button{position:absolute;top:8px;right:8px;min-height:34px;font-size:13px}
+pre,.scroll{overflow-x:auto}code{overflow-wrap:anywhere;font-size:.92em}
+footer{color:var(--muted);font-size:14px}
+@media(max-width:860px){.lab,.cols{grid-template-columns:minmax(0,1fr)}.trio{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start;white-space:normal}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--muted);font-weight:600}.stack td:empty{display:none}.ctl{grid-template-columns:7.5em minmax(0,1fr) 3em}.read b{font-size:18px}}
+</style><script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<span id="probeSi" style="color:var(--si);display:none"></span><span id="probeNo" style="color:var(--no);display:none"></span><span id="probeBg" style="color:var(--panel);display:none"></span><span id="probeInk" style="color:var(--ink);display:none"></span>
+
+<header class="band top"><div class="wrap">
+  <h1>Muchos árboles: votar juntos o corregirse en fila</h1>
+  <p class="lede">Bootstrap, bagging, bosque aleatorio, boosting y XGBoost en un problema de clasificación. Cambie de método y sume árboles: la frontera de decisión se mueve en vivo.</p>
+  <div class="lab">
+    <div class="card">
+      <div class="tabs" role="group" aria-label="Método">
+        <button data-m="arbol">Un árbol</button><button data-m="bag">Bagging</button><button data-m="rf" class="on">Bosque aleatorio</button><button data-m="boost">Boosting (estilo XGBoost)</button>
+      </div>
+      <div class="cv"><canvas id="lab"></canvas></div>
+      <div class="legend"><span><span class="dot" style="background:var(--si)"></span>sí (entrenamiento)</span><span><span class="dot" style="background:var(--no)"></span>no (entrenamiento)</span><span>Fondo: rojo = el modelo dice sí, azul = dice no; más intenso = más seguro.</span></div>
+    </div>
+    <div class="card">
+      <h3 id="labTitle"></h3>
+      <p id="labDesc" class="note" style="font-size:14px"></p>
+      <div id="ctls"></div>
+      <label class="chk"><input type="checkbox" id="showTest"> Mostrar los datos de prueba (con borde)</label>
+      <label class="chk" id="errWrap"><input type="checkbox" id="showErr" checked> Agrandar los puntos donde se equivoca</label>
+      <div class="read">
+        <div><span>Accuracy entrenamiento</span><b id="accTr"></b></div>
+        <div><span>Accuracy prueba</span><b id="accTe"></b></div>
+        <div><span>AUC prueba</span><b id="aucTe"></b></div>
+      </div>
+      <p class="note" id="labMsg" style="margin-top:10px"></p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button id="reseed">Nuevos datos</button></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px">Datos sintéticos de dos variables (dos medialunas con ruido, 35 % de "sí"), 300 puntos de entrenamiento y 300 de prueba, para poder dibujar la frontera. Los árboles se entrenan aquí mismo, en su navegador. Las cifras reales de Bank Marketing están más abajo.</p>
+</div></header>
+
+<nav class="scroll" aria-label="Secciones">
+  <a href="#bootstrap">Bootstrap</a><a href="#porque">¿Por qué en el bosque?</a><a href="#bagging">Bagging vs bosque</a><a href="#boosting">Boosting</a><a href="#xgboost">XGBoost</a><a href="#bank">En Bank Marketing</a><a href="#comparacion">Comparación</a><a href="#codigo">Código</a>
+</nav>
+
+<main>
+<section class="band" id="bootstrap"><div class="wrap cols">
+  <div>
+    <h2>Una muestra bootstrap es sacar con reposición</h2>
+    <p>Tiene una tabla de <b>n</b> clientes. Una muestra bootstrap es otra tabla del <b>mismo tamaño n</b>, armada sacando clientes al azar <b>con reposición</b>: después de sacar a alguien, lo devuelve a la bolsa y puede volver a salir.</p>
+    <p>Resultado: algunos clientes salen dos o tres veces y otros no salen nunca. En promedio, cerca del <b>63 %</b> aparece al menos una vez y el <b>37 %</b> se queda por fuera. A esos que no salieron se les llama <b>fuera de la bolsa</b> (<i>out-of-bag</i>, OOB).</p>
+    <p>¿Por qué 37 %? La probabilidad de que un cliente no salga en ninguna de las n extracciones es (1 − 1/n)<sup>n</sup>, que se acerca a 1/e ≈ 0,368 cuando n crece.</p>
+    <p>El bootstrap nació en estadística (Efron, 1979) para medir la incertidumbre de una estimación sin fórmulas: se repite el cálculo en muchas muestras bootstrap y se mira cuánto varía. En machine learning se usa para algo más: <b>darle a cada árbol unos datos un poco distintos</b>.</p>
+  </div>
+  <div class="card">
+    <h3>Pruébelo con 20 clientes</h3>
+    <div class="clients" id="clients" aria-live="polite"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button id="bs1">Sacar una muestra bootstrap</button><button id="bs1000">Repetir 1 000 veces</button></div>
+    <p style="margin-top:12px" id="bsMsg">Cada ficha es un cliente. El número negro dice cuántas veces salió; las fichas transparentes se quedaron fuera de la bolsa.</p>
+    <p>Fuera de la bolsa en promedio: <span class="big" id="bsAvg">—</span></p>
+    <p class="note" id="bsN"></p>
+  </div>
+</div></section>
+
+<section class="band alt" id="porque"><div class="wrap">
+  <h2>¿Por qué el bosque usa bootstrap? Para que los árboles no piensen igual</h2>
+  <div class="cols">
+    <div>
+      <p>Un árbol sin límite es <b>muy nervioso</b>: memoriza el ruido, y si le cambia unos pocos datos, la frontera cambia mucho. Eso se llama <b>alta varianza</b>. Es el árbol que en la Sesión 6 sacó AUC 1,00 en entrenamiento y 0,61 en prueba.</p>
+      <p>La idea del bagging es aprovechar ese nerviosismo: entrenar muchos árboles, <b>cada uno con una muestra bootstrap distinta</b>, y promediar lo que dicen. Cada árbol se equivoca a su manera, y al promediar, los errores de unos se cancelan con los de otros. La parte que todos aciertan se queda.</p>
+      <p>Si todos los árboles vieran exactamente los mismos datos, saldrían idénticos y promediarlos no serviría de nada. <b>El bootstrap es la forma más barata de fabricar árboles distintos</b> a partir de una sola tabla.</p>
+      <p>Regalo extra: cada árbol tiene su 37 % de clientes que no vio. Con ellos se puede evaluar el bosque sin separar un conjunto de validación: es el <b>OOB score</b> (<code>oob_score=True</code>). En Bank Marketing el bosque da accuracy OOB 0,895, casi igual a lo que da en prueba.</p>
+    </div>
+    <div class="callout" style="margin-top:0">
+      <h3>La frase para la clase</h3>
+      <p style="margin:0">Un árbol solo es un experto nervioso. Cien árboles entrenados con muestras distintas son un comité: cada uno se equivoca en algo diferente y el promedio se equivoca menos.</p>
+    </div>
+  </div>
+  <div class="trio" style="margin-top:12px">
+    <figure><div class="cv"><canvas id="t1"></canvas></div><figcaption>Árbol 1: su muestra bootstrap (los puntos grandes salieron repetidos)</figcaption></figure>
+    <figure><div class="cv"><canvas id="t2"></canvas></div><figcaption>Árbol 2: otra muestra, otra frontera</figcaption></figure>
+    <figure><div class="cv"><canvas id="t3"></canvas></div><figcaption>Árbol 3: otra más</figcaption></figure>
+    <figure><div class="cv"><canvas id="tavg"></canvas></div><figcaption><b>Promedio de 100 árboles así:</b> la frontera se suaviza</figcaption></figure>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button id="trioBtn">Otras tres muestras</button><span class="note" id="trioMsg"></span></div>
+</div></section>
+
+<section class="band" id="bagging"><div class="wrap cols">
+  <div>
+    <h2>Bagging y bosque aleatorio: la diferencia es un sorteo de columnas</h2>
+    <p><b>Bagging</b> (<i>bootstrap aggregating</i>, Breiman 1996): muchos árboles, cada uno con su muestra bootstrap, y se promedian. Cada árbol puede usar <b>todas</b> las columnas en cada corte.</p>
+    <p><b>Bosque aleatorio</b> (Breiman 2001): lo mismo, más un segundo sorteo. <b>En cada corte</b>, el árbol solo puede elegir entre unas pocas columnas al azar (<code>max_features</code>; en clasificación, por defecto √p).</p>
+    <p>¿Para qué el segundo sorteo? Si hay una columna muy fuerte, en bagging casi todos los árboles la ponen en la raíz y terminan pareciéndose. Al obligarlos a veces a no usarla, el bosque produce árboles <b>más distintos entre sí</b>, y promediar árboles distintos reduce más el error.</p>
+    <p>En Bank Marketing, con 41 columnas, cada corte del bosque mira solo 6 (√41 ≈ 6,4). Resultado en prueba: bagging AUC 0,792, bosque 0,802, y el bosque además entrena mucho más rápido, porque cada corte revisa menos columnas.</p>
+  </div>
+  <div class="card">
+    <h3>Las dos en una tabla</h3>
+    <div class="scroll"><table class="stack">
+      <thead><tr><th></th><th>Bagging</th><th>Bosque aleatorio</th></tr></thead>
+      <tbody>
+        <tr><td>Filas de cada árbol</td><td>Muestra bootstrap</td><td>Muestra bootstrap</td></tr>
+        <tr><td>Columnas en cada corte</td><td>Todas</td><td>Unas pocas al azar (√p)</td></tr>
+        <tr><td>Árboles</td><td>Profundos, se entrenan en paralelo</td><td>Profundos, se entrenan en paralelo</td></tr>
+        <tr><td>Cómo decide</td><td>Promedio (o votación)</td><td>Promedio (o votación)</td></tr>
+        <tr><td>Qué reduce</td><td>Varianza</td><td>Varianza, más que bagging</td></tr>
+        <tr><td>En scikit-learn</td><td><code>BaggingClassifier</code></td><td><code>RandomForestClassifier</code></td></tr>
+      </tbody></table></div>
+    <p class="note" style="margin-top:10px">Bagging sirve con cualquier modelo de base (k-NN, logística…); el bosque aleatorio es bagging pensado para árboles. En el laboratorio de arriba, "Bosque aleatorio" sortea 1 de las 2 variables en cada corte.</p>
+  </div>
+</div></section>
+
+<section class="band alt" id="boosting"><div class="wrap cols">
+  <div>
+    <h2>Boosting: árboles en fila, cada uno corrige al anterior</h2>
+    <p>El bosque entrena árboles <b>independientes y en paralelo</b>. El boosting hace lo contrario: entrena árboles <b>uno detrás de otro</b>, y cada árbol nuevo se dedica a corregir lo que los anteriores hacen mal.</p>
+    <p>Los árboles del boosting son <b>pequeños</b> (profundidad 2 a 6): cada uno, solo, es un modelo flojo. La fuerza está en sumar muchos. Mientras el bosque baja la varianza de árboles nerviosos, el boosting baja el <b>sesgo</b> de árboles perezosos.</p>
+    <p>Hay dos familias:</p>
+    <p><b>AdaBoost</b> (1997): después de cada árbol, sube el <b>peso</b> de los clientes mal clasificados, para que el siguiente árbol les preste más atención.</p>
+    <p><b>Gradient boosting</b> (Friedman, 2001): cada árbol nuevo aprende los <b>residuos</b>, la diferencia entre lo que pasó (1 o 0) y la probabilidad que da el modelo hasta ahora. Es descenso de gradiente, como en la Sesión 4, pero en vez de mover coeficientes, se suma un árbol en la dirección que más baja la pérdida.</p>
+    <p>La <b>tasa de aprendizaje</b> (<code>learning_rate</code>) dice cuánto se le cree a cada árbol nuevo. Pequeña: se necesitan más árboles, pero generaliza mejor. Grande: aprende rápido y sobreajusta rápido.</p>
+  </div>
+  <div class="card">
+    <h3>Ronda a ronda</h3>
+    <div class="cv"><canvas id="rr"></canvas></div>
+    <div class="ctl"><label for="rrK">Ronda</label><input type="range" id="rrK" min="1" max="40" value="1"><output id="rrKo">1</output></div>
+    <p class="note" id="rrMsg"></p>
+    <p class="note">Árboles de profundidad 2 y tasa de aprendizaje 0,3. El tamaño de cada punto es cuánto se equivoca el modelo con él en esa ronda: el árbol siguiente se enfoca en los grandes.</p>
+  </div>
+  <div class="callout" style="grid-column:1/-1">
+    <h3>Una diferencia práctica enorme: qué pasa al poner más árboles</h3>
+    <p style="margin:0">En el bosque, <b>más árboles nunca empeoran</b> la prueba: el promedio solo se estabiliza (en el laboratorio, súbale a 200 árboles). En el boosting, <b>más rondas sí pueden sobreajustar</b>: cada árbol sigue persiguiendo los errores de entrenamiento, incluido el ruido. Por eso el boosting necesita <b>parada temprana</b> (<i>early stopping</i>): se vigila un conjunto de validación y se detiene cuando deja de mejorar. Pruébelo arriba con boosting, tasa 1,0 y profundidad 4.</p>
+  </div>
+</div></section>
+
+<section class="band" id="xgboost"><div class="wrap">
+  <h2>XGBoost: gradient boosting con frenos y turbo</h2>
+  <div class="cols">
+    <div>
+      <p><b>XGBoost</b> (<i>eXtreme Gradient Boosting</i>, Chen y Guestrin, 2016) es gradient boosting, la misma idea de árboles en fila que corrigen residuos, con varias mejoras que lo volvieron el favorito de Kaggle para datos en tabla:</p>
+      <p><b>1. Regularización dentro del árbol.</b> Su función objetivo castiga los árboles complicados: <code>reg_lambda</code> encoge los valores de las hojas (como Ridge) y <code>gamma</code> exige una ganancia mínima para hacer un corte. Es un freno al sobreajuste que el gradient boosting clásico no tiene.</p>
+      <p><b>2. Usa la curvatura.</b> Para elegir cortes y valores de hoja usa la primera y la segunda derivada de la pérdida (el método de Newton). El valor de cada hoja es −G/(H + λ): suma de gradientes sobre suma de curvaturas más el freno.</p>
+      <p><b>3. Submuestreo, como el bosque.</b> <code>subsample</code> le da a cada árbol una parte de las filas y <code>colsample_bytree</code> una parte de las columnas. Le roba la mejor idea al bosque.</p>
+      <p><b>4. Rápido y práctico.</b> Corre en paralelo, agrupa valores en histogramas, maneja los vacíos solo (aprende hacia qué lado mandar los <code>NaN</code>) y trae parada temprana incluida.</p>
+      <p>El modo "Boosting (estilo XGBoost)" del laboratorio usa exactamente esas cuentas: hojas −G/(H + λ) y cortes elegidos por ganancia con λ.</p>
+    </div>
+    <div class="callout" style="margin-top:0">
+      <h3>Desbalance: <code>scale_pos_weight</code></h3>
+      <p>Es el <code>class_weight</code> de XGBoost: multiplica el peso de los "sí". La receta usual es poner <b>número de "no" ÷ número de "sí"</b>; en Bank Marketing, 7,5.</p>
+      <p style="margin:0">En prueba, el AUC casi no cambia (0,806 → 0,804), porque el ordenamiento es el mismo. Lo que cambia es dónde queda el 0,5: el recall sube de <b>0,245 a 0,649</b> y el F1 de 0,357 a 0,448. Es lo mismo que mover el umbral (lo que vimos en la guía de métricas), hecho desde el entrenamiento.</p>
+    </div>
+  </div>
+  <h3 style="margin-top:20px">Los hiperparámetros que importan</h3>
+  <div class="hp" id="hp"></div>
+</div></section>
+
+<section class="band alt" id="bank"><div class="wrap">
+  <h2>En Bank Marketing, los ensambles le ganan al árbol solo</h2>
+  <p>Mismo split de la Sesión 5 (80/20 estratificado, <code>random_state=42</code>, sin <code>duration</code>), 9 043 clientes de prueba. Umbral 0,5 para recall, precisión y F1.</p>
+  <div>
+    <div class="card scroll"><table class="stack">
+      <thead><tr><th>Modelo</th><th>AUC entrenamiento</th><th>AUC prueba</th><th>Recall</th><th>Precisión</th><th>F1</th></tr></thead>
+      <tbody id="bankT"></tbody></table></div>
+    <div class="card" style="margin-top:16px;max-width:860px"><h3>AUC de prueba al sumar árboles</h3><div class="fig" id="curve"></div>
+      <p class="note">El bosque llega rápido a su techo y se queda ahí. XGBoost (tasa 0,05) arranca lento y sigue subiendo hasta 400 rondas: con una tasa pequeña, necesita muchos árboles.</p></div>
+  </div>
+  <p class="note" style="margin-top:12px">Bagging y bosque con <code>min_samples_leaf=5</code> y 300 árboles; gradient boosting de scikit-learn con sus valores por defecto (100 árboles, profundidad 3, tasa 0,1); XGBoost con 400 rondas, tasa 0,05, profundidad 4, <code>subsample</code> y <code>colsample_bytree</code> 0,8. Sin búsqueda de hiperparámetros: eso es la Sesión 11.</p>
+</div></section>
+
+<section class="band" id="comparacion"><div class="wrap">
+  <h2>Comparación y cuándo usar cada uno</h2>
+  <div class="scroll"><table class="stack">
+    <thead><tr><th></th><th>Un árbol</th><th>Bagging</th><th>Bosque aleatorio</th><th>Gradient boosting</th><th>XGBoost</th></tr></thead>
+    <tbody id="cmpT"></tbody></table></div>
+  <div class="cols" style="margin-top:24px">
+    <div class="card"><h3>Úselo cuando</h3><ul id="useYes" style="margin:0;padding-left:1.2em"></ul></div>
+    <div class="card"><h3>Mejor no, cuando</h3><ul id="useNo" style="margin:0;padding-left:1.2em"></ul></div>
+  </div>
+</div></section>
+
+<section class="band alt" id="codigo"><div class="wrap">
+  <h2>El código, listo para Colab</h2>
+  <p>Con <code>X_train</code>, <code>X_test</code>, <code>y_train</code>, <code>y_test</code> de la Sesión 5. Los árboles no necesitan escalar. XGBoost ya viene instalado en Colab.</p>
+  <div id="codes" style="display:grid;gap:14px"></div>
+</div></section>
+</main>
+
+<footer class="band"><div class="wrap">
+  <p>Curso Introducción al Análisis Avanzado de Datos con Python · Univalle · Sesiones 6 y 11. Datos: Bank Marketing (Moro, Cortez y Rita, 2014; UCI Machine Learning Repository). Cifras calculadas con scikit-learn 1.9 y XGBoost 3.4.</p>
+</div></footer>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const f=(x,d=3)=>x==null||isNaN(x)?'—':x.toFixed(d).replace('.',',');
+const mulberry=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+let rnd=mulberry(7);
+const gauss=r=>{let u=0,v=0;while(!u)u=r();v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+
+// ---------- datos: dos medialunas con ruido
+const XMIN=-1.7,XMAX=2.7,YMIN=-1.3,YMAX=1.8;
+function moons(n,r){const X=[],y=[];const nsi=Math.round(n*.35);
+  for(let i=0;i<n;i++){const si=i<nsi,t=r()*Math.PI;let a,b;
+    if(si){a=Math.cos(t);b=Math.sin(t)}else{a=1-Math.cos(t);b=.5-Math.sin(t)}
+    X.push([a+gauss(r)*.26,b+gauss(r)*.26]);y.push(si?1:0)}return {X,y}}
+let TR,TE;
+function newData(seed){const r=mulberry(seed);TR=moons(300,r);TE=moons(300,r)}
+
+// ---------- árbol de clasificación (Gini)
+function buildCls(X,y,idx,o,r,d){
+  let n=idx.length,pos=0;for(const i of idx)pos+=y[i];
+  const leaf={v:pos/n};
+  if(d>=o.depth||n<2*o.minLeaf||pos===0||pos===n)return leaf;
+  let feats=[0,1];if(o.mtry===1)feats=[r()<.5?0:1];
+  let best=null;
+  for(const fe of feats){const s=idx.slice().sort((a,b)=>X[a][fe]-X[b][fe]);let lp=0;
+    for(let k=0;k<n-1;k++){lp+=y[s[k]];const nl=k+1,nr=n-nl;
+      if(nl<o.minLeaf||nr<o.minLeaf)continue;const xa=X[s[k]][fe],xb=X[s[k+1]][fe];if(xa===xb)continue;
+      const rp=pos-lp,gl=1-(lp/nl)**2-((nl-lp)/nl)**2,gr=1-(rp/nr)**2-((nr-rp)/nr)**2,g=(nl*gl+nr*gr)/n;
+      if(!best||g<best.g)best={g,fe,t:(xa+xb)/2,k,s}}}
+  if(!best)return leaf;
+  return {f:best.fe,t:best.t,l:buildCls(X,y,best.s.slice(0,best.k+1),o,r,d+1),r:buildCls(X,y,best.s.slice(best.k+1),o,r,d+1)}}
+// ---------- árbol de regresión estilo XGBoost (gradientes g, curvaturas h)
+function buildXgb(X,g,h,idx,o,d){
+  let G=0,H=0;for(const i of idx){G+=g[i];H+=h[i]}
+  const leaf={v:-G/(H+o.lambda)},n=idx.length;
+  if(d>=o.depth||n<2)return leaf;
+  const base=G*G/(H+o.lambda);let best=null;
+  for(const fe of [0,1]){const s=idx.slice().sort((a,b)=>X[a][fe]-X[b][fe]);let gl=0,hl=0;
+    for(let k=0;k<n-1;k++){gl+=g[s[k]];hl+=h[s[k]];const xa=X[s[k]][fe],xb=X[s[k+1]][fe];if(xa===xb)continue;
+      const gr=G-gl,hr=H-hl;if(hl<o.minH||hr<o.minH)continue;
+      const gain=gl*gl/(hl+o.lambda)+gr*gr/(hr+o.lambda)-base;
+      if(!best||gain>best.gain)best={gain,fe,t:(xa+xb)/2,k,s}}}
+  if(!best||best.gain<=1e-9)return leaf;
+  return {f:best.fe,t:best.t,l:buildXgb(X,g,h,best.s.slice(0,best.k+1),o,d+1),r:buildXgb(X,g,h,best.s.slice(best.k+1),o,d+1)}}
+const pred=(nd,x)=>{while(nd.l)nd=x[nd.f]<=nd.t?nd.l:nd.r;return nd.v};
+const sig=z=>1/(1+Math.exp(-z));
+
+// ---------- rejilla para dibujar
+const GW=120,GH=90,GRID=[];for(let j=0;j<GH;j++)for(let i=0;i<GW;i++)GRID.push([XMIN+(i+.5)/GW*(XMAX-XMIN),YMAX-(j+.5)/GH*(YMAX-YMIN)]);
+
+// ---------- ensambles con sumas acumuladas
+function fitEnsemble(mode,p,seed){
+  const r=mulberry(seed),X=TR.X,y=TR.y,n=X.length,all=[...Array(n).keys()];
+  const T=mode==='arbol'?1:p.max,trees=[];
+  const sets=[GRID,TR.X,TE.X],cum=sets.map(s=>new Float64Array(s.length*(T+1)));
+  if(mode==='boost'){
+    const prior=y.reduce((a,b)=>a+b,0)/n,F0=Math.log(prior/(1-prior)),F=new Float64Array(n).fill(F0);
+    sets.forEach((s,si)=>{for(let i=0;i<s.length;i++)cum[si][i]=F0});
+    const resid=[];
+    for(let t=0;t<T;t++){const g=[],h=[];for(let i=0;i<n;i++){const q=sig(F[i]);g.push(q-y[i]);h.push(q*(1-q))}
+      resid.push(g.map(Math.abs));
+      const tr=buildXgb(X,g,h,all,{depth:p.depth,lambda:p.lambda,minH:.5},0);trees.push(tr);
+      for(let i=0;i<n;i++)F[i]+=p.lr*pred(tr,X[i]);
+      sets.forEach((s,si)=>{const L=s.length,o=(t+1)*L,pr=t*L;for(let i=0;i<L;i++)cum[si][o+i]=cum[si][pr+i]+p.lr*pred(tr,s[i])})}
+    const last=[];for(let i=0;i<n;i++)last.push(Math.abs(sig(F[i])-y[i]));resid.push(last);
+    return {mode,T,cum,resid,get:(si,k,i)=>sig(cum[si][k*sets[si].length+i])}}
+  for(let t=0;t<T;t++){
+    const idx=mode==='arbol'?all:Array.from({length:n},()=>Math.floor(r()*n));
+    const tr=buildCls(X,y,idx,{depth:p.depth,minLeaf:1,mtry:mode==='rf'?1:2},r,0);trees.push(tr);
+    sets.forEach((s,si)=>{const L=s.length,o=(t+1)*L,pr=t*L;for(let i=0;i<L;i++)cum[si][o+i]=cum[si][pr+i]+pred(tr,s[i])})}
+  return {mode,T,cum,get:(si,k,i)=>cum[si][k*sets[si].length+i]/k}}
+
+function auc(p,y){const o=p.map((v,i)=>[v,y[i]]).sort((a,b)=>a[0]-b[0]);let rank=0,sumPos=0,np=0,i=0;
+  while(i<o.length){let j=i;while(j<o.length&&o[j][0]===o[i][0])j++;const avg=(i+j+1)/2;for(let k=i;k<j;k++)if(o[k][1]){sumPos+=avg;np++}i=j}
+  const nn=o.length-np;return (sumPos-np*(np+1)/2)/(np*nn)}
+
+// ---------- colores
+let C={};function readColors(){const g=id=>getComputedStyle($(id)).color.match(/\d+(\.\d+)?/g).slice(0,3).map(Number);C={si:g('probeSi'),no:g('probeNo'),bg:g('probeBg'),ink:g('probeInk')}}
+const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+const rgb=c=>`rgb(${c[0]},${c[1]},${c[2]})`;
+
+function paint(cv,probFn,pts){
+  const box=cv.parentElement,W=box.clientWidth,H=box.clientHeight;if(W<40)return;
+  const dpr=window.devicePixelRatio||1;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  const off=document.createElement('canvas');off.width=GW;off.height=GH;const oc=off.getContext('2d'),im=oc.createImageData(GW,GH);
+  for(let k=0;k<GW*GH;k++){const q=probFn(k),c=mix(C.bg,q>=.5?C.si:C.no,.12+.6*Math.abs(q-.5)*2);im.data.set([c[0],c[1],c[2],255],k*4)}
+  oc.putImageData(im,0,0);ctx.imageSmoothingEnabled=false;ctx.drawImage(off,0,0,W,H);
+  const sx=x=>(x-XMIN)/(XMAX-XMIN)*W,sy=v=>(YMAX-v)/(YMAX-YMIN)*H;
+  for(const p of pts){ctx.beginPath();ctx.arc(sx(p.x[0]),sy(p.x[1]),p.r,0,7);
+    if(p.ring){ctx.fillStyle=rgb(C.bg);ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=rgb(p.y?C.si:C.no);ctx.stroke()}
+    else{ctx.fillStyle=rgb(p.y?C.si:C.no);ctx.fill();ctx.lineWidth=1;ctx.strokeStyle=rgb(C.bg);ctx.stroke()}}}
+
+// ---------- laboratorio
+const DESC={
+ arbol:['Un árbol de decisión','Un solo árbol con todos los datos. Súbale la profundidad: en entrenamiento acierta casi todo, en prueba no. Es la varianza alta.'],
+ bag:['Bagging','Cada árbol (profundo) ve una muestra bootstrap distinta y usa las dos variables en cada corte. Se promedia lo que dicen.'],
+ rf:['Bosque aleatorio','Como bagging, pero en cada corte el árbol solo puede usar una variable sorteada. Árboles más distintos, promedio más estable.'],
+ boost:['Boosting (estilo XGBoost)','Árboles pequeños en fila: cada uno aprende los residuos de los anteriores. Hojas −G/(H + λ), como XGBoost.']};
+const CTL={
+ arbol:[['depth','Profundidad',1,15,15,1]],
+ bag:[['n','Árboles',1,200,50,1],['depth','Profundidad',1,15,15,1]],
+ rf:[['n','Árboles',1,200,50,1],['depth','Profundidad',1,15,15,1]],
+ boost:[['n','Rondas',1,200,60,1],['lr','Tasa de aprendizaje',.05,1,.3,.05],['depth','Profundidad',1,5,2,1],['lambda','λ (reg_lambda)',0,10,1,.5]]};
+let mode='rf',P={},model=null,key='',seed=1;
+function ctlUI(){$('ctls').innerHTML=CTL[mode].map(([k,l,a,b,v,s])=>{if(P[mode+k]==null)P[mode+k]=v;
+  return `<div class="ctl"><label for="c_${k}">${l}</label><input type="range" id="c_${k}" min="${a}" max="${b}" step="${s}" value="${P[mode+k]}"><output id="o_${k}"></output></div>`}).join('');
+  CTL[mode].forEach(([k])=>$('c_'+k).addEventListener('input',e=>{P[mode+k]=+e.target.value;run()}));
+  $('labTitle').textContent=DESC[mode][0];$('labDesc').textContent=DESC[mode][1];
+  $('errWrap').style.display=mode==='boost'?'flex':'none';
+  document.querySelectorAll('.tabs [data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===mode))}
+function run(){
+  const g=k=>P[mode+k];CTL[mode].forEach(([k,,,,,s])=>$('o_'+k).textContent=s<1?f(g(k),2):g(k));
+  const p={max:mode==='boost'?200:200,depth:g('depth'),lr:g('lr'),lambda:g('lambda')};
+  const kk=[mode,seed,p.depth,p.lr,p.lambda].join('|');
+  if(kk!==key){model=fitEnsemble(mode,p,seed*31+3);key=kk}
+  const K=mode==='arbol'?1:Math.min(g('n'),model.T);draw(K)}
+function draw(K){if(!model)return;
+  const m=model,ptr=TR.X.map((x,i)=>m.get(1,K,i)),pte=TE.X.map((x,i)=>m.get(2,K,i));
+  const acc=(p,y)=>p.reduce((a,v,i)=>a+((v>=.5?1:0)===y[i]),0)/y.length;
+  $('accTr').textContent=f(acc(ptr,TR.y));$('accTe').textContent=f(acc(pte,TE.y));$('aucTe').textContent=f(auc(pte,TE.y));
+  const big=mode==='boost'&&$('showErr').checked;
+  const pts=TR.X.map((x,i)=>({x,y:TR.y[i],r:big?2+9*Math.abs(ptr[i]-TR.y[i]):3.2}));
+  if($('showTest').checked)TE.X.forEach((x,i)=>pts.push({x,y:TE.y[i],r:3.4,ring:1}));
+  paint($('lab'),k=>m.get(0,K,k),pts);
+  const gap=acc(ptr,TR.y)-acc(pte,TE.y);
+  $('labMsg').textContent=gap>.08?`Diferencia entrenamiento − prueba: ${f(gap,2)}. Está memorizando ruido (sobreajuste).`:`Diferencia entrenamiento − prueba: ${f(gap,2)}.`}
+document.querySelectorAll('.tabs [data-m]').forEach(b=>b.addEventListener('click',()=>{mode=b.dataset.m;ctlUI();run()}));
+$('showTest').addEventListener('change',run);$('showErr').addEventListener('change',run);
+$('reseed').addEventListener('click',()=>{seed++;newData(100+seed);run();trio();rrFit()});
+
+// ---------- bootstrap con 20 clientes
+const NOMBRES=['Ana','Luis','Sofía','Jorge','Valen','Andrés','Camila','Pedro','Laura','Diego','Mafe','Julián','Paula','Óscar','Isa','Felipe','Daniela','Santi','Nata','Héctor'];
+const SI=new Set([0,4,9,13,17]);let bsTot=0,bsRuns=0;
+function bsDraw(){const r=Math.random,c=Array(20).fill(0);for(let i=0;i<20;i++)c[Math.floor(r()*20)]++;return c}
+function bsShow(c){$('clients').innerHTML=NOMBRES.map((n,i)=>`<div class="cl ${SI.has(i)?'si':'no'} ${c&&!c[i]?'oob':''}">${n}${c&&c[i]>1?`<i>×${c[i]}</i>`:''}</div>`).join('');}
+function bsAdd(c){const oob=c.filter(v=>!v).length;bsTot+=oob/20;bsRuns++;$('bsAvg').textContent=(bsTot/bsRuns*100).toFixed(1).replace('.',',')+' %';$('bsN').textContent=`${bsRuns.toLocaleString('es-CO').replace(/\./g,' ')} muestras. La teoría dice 35,8 % con 20 clientes y 36,8 % cuando son muchos.`;return oob}
+bsShow(null);
+$('bs1').onclick=()=>{const c=bsDraw(),oob=bsAdd(c);bsShow(c);const rep=c.filter(v=>v>1).length;$('bsMsg').textContent=`Esta muestra tiene 20 fichas, pero ${rep} clientes salieron repetidos y ${oob} se quedaron fuera de la bolsa.`};
+$('bs1000').onclick=()=>{let c;for(let k=0;k<1000;k++){c=bsDraw();bsAdd(c)}bsShow(c);$('bsMsg').textContent='Se muestra la última de las 1 000 muestras.'};
+
+// ---------- tres árboles bootstrap + promedio
+let trioSeed=11;
+function trio(){const r=mulberry(trioSeed),n=TR.X.length,trees=[];
+  for(let t=0;t<100;t++){const idx=Array.from({length:n},()=>Math.floor(r()*n));const tr=buildCls(TR.X,TR.y,idx,{depth:15,minLeaf:1,mtry:2},r,0);
+    if(t<3){const cnt=new Map();idx.forEach(i=>cnt.set(i,(cnt.get(i)||0)+1));
+      paint($('t'+(t+1)),k=>pred(tr,GRID[k]),[...cnt].map(([i,c])=>({x:TR.X[i],y:TR.y[i],r:1.6+1.4*c})));
+      const out=n-cnt.size;if(t===0)$('trioMsg').textContent=`El árbol 1 no vio ${out} de los ${n} puntos (${(out/n*100).toFixed(0)} %).`}
+    trees.push(tr)}
+  paint($('tavg'),k=>trees.reduce((a,tr)=>a+pred(tr,GRID[k]),0)/100,TR.X.map((x,i)=>({x,y:TR.y[i],r:2.2})))}
+$('trioBtn').onclick=()=>{trioSeed++;trio()};
+
+// ---------- boosting ronda a ronda
+let RR=null;
+function rrFit(){RR=fitEnsemble('boost',{max:40,depth:2,lr:.3,lambda:1},5);rrDraw()}
+function rrDraw(){const k=+$('rrK').value;$('rrKo').textContent=k;
+  const ptr=TR.X.map((x,i)=>RR.get(1,k,i)),err=ptr.map((v,i)=>Math.abs(v-TR.y[i]));
+  paint($('rr'),i=>RR.get(0,k,i),TR.X.map((x,i)=>({x,y:TR.y[i],r:2+9*err[i]})));
+  const acc=ptr.reduce((a,v,i)=>a+((v>=.5?1:0)===TR.y[i]),0)/ptr.length,pte=TE.X.map((x,i)=>RR.get(2,k,i));
+  $('rrMsg').textContent=`Después de ${k} ${k===1?'árbol':'árboles'}: accuracy de entrenamiento ${f(acc)}, AUC de prueba ${f(auc(pte,TE.y))}.`}
+$('rrK').addEventListener('input',rrDraw);
+
+// ---------- hiperparámetros XGBoost
+const HP=[['n_estimators','Cuántos árboles (rondas). Con tasa pequeña hacen falta muchos; úselo junto con parada temprana.'],
+ ['learning_rate','Cuánto se le cree a cada árbol (0,01–0,3). Más pequeña generaliza mejor pero pide más rondas.'],
+ ['max_depth','Profundidad de cada árbol (3–8). Árboles más hondos capturan interacciones y sobreajustan antes.'],
+ ['subsample','Fracción de filas que ve cada árbol (0,5–1). Aleatoriedad tipo bosque contra el sobreajuste.'],
+ ['colsample_bytree','Fracción de columnas por árbol (0,5–1). El sorteo de columnas del bosque.'],
+ ['min_child_weight','Curvatura mínima (≈ casos) por hoja. Más alto: hojas menos específicas.'],
+ ['reg_lambda, gamma','Frenos: λ encoge los valores de las hojas; γ exige una ganancia mínima para cortar.'],
+ ['scale_pos_weight','Peso de la clase positiva para el desbalance. Receta: número de "no" ÷ número de "sí".'],
+ ['early_stopping_rounds','Detiene el entrenamiento si la métrica de validación no mejora en esas rondas.']];
+$('hp').innerHTML=HP.map(([k,v])=>`<div class="card"><code>${k}</code><p style="margin:6px 0 0;font-size:15px">${v}</p></div>`).join('');
+
+// ---------- Bank Marketing (cifras reales)
+const BANK=[['Árbol sin límite',1.0,.612,.329,.292,.31],['Árbol profundidad 5',.707,.705,.15,.691,.247],['Bagging (300 árboles)',.98,.792,.233,.613,.338],['Bosque aleatorio (300)',.945,.802,.187,.695,.295],['Gradient boosting (sklearn)',.804,.797,.204,.669,.313],['XGBoost',.844,.806,.245,.656,.357],['XGBoost + scale_pos_weight',.853,.804,.649,.342,.448]];
+$('bankT').innerHTML=BANK.map(r=>`<tr><td>${r[0]}</td><td class="n">${f(r[1])}</td><td class="n"><div class="barc"><i style="width:${(r[2]-.5)/.35*60}px"></i><b>${f(r[2])}</b></div></td><td class="n">${f(r[3])}</td><td class="n">${f(r[4])}</td><td class="n">${f(r[5])}</td></tr>`).join('');
+const XS=['1','2','5','10','25','50','100','200','300/400'],RFc=[.691,.743,.768,.784,.796,.8,.802,.802,.802],XGc=[.695,.709,.751,.756,.764,.778,.794,.805,.806];
+function curve(){const box=$('curve'),W=box.clientWidth,H=box.clientHeight;if(W<60)return;const m={l:44,r:34,t:14,b:44};
+  const xs=i=>m.l+i/(XS.length-1)*(W-m.l-m.r),ys=v=>m.t+(1-(v-.65)/.2)*(H-m.t-m.b);
+  let o='';for(const v of [.65,.7,.75,.8,.85])o+=`<line class="grid" x1="${xs(0)}" x2="${xs(XS.length-1)}" y1="${ys(v)}" y2="${ys(v)}"/><text x="${m.l-6}" y="${ys(v)+4}" text-anchor="end">${f(v,2)}</text>`;
+  XS.forEach((l,i)=>{if(W>=520||i%2===0||i===XS.length-1)o+=`<text x="${xs(i)}" y="${H-26}" text-anchor="middle">${l}</text>`});
+  o+=`<text x="${(xs(0)+xs(XS.length-1))/2}" y="${H-6}" text-anchor="middle">número de árboles (escala aproximada)</text>`;
+  const line=(a,col,lab)=>`<path d="${a.map((v,i)=>(i?'L':'M')+xs(i)+','+ys(v)).join('')}" fill="none" style="stroke:${col};stroke-width:2.5"/>`+a.map((v,i)=>`<circle cx="${xs(i)}" cy="${ys(v)}" r="3.5" style="fill:${col}"/>`).join('')+`<text x="${xs(XS.length-1)-4}" y="${ys(a[a.length-1])+(lab==='XGBoost'?-10:18)}" text-anchor="end" style="fill:${col};font-weight:600">${lab}</text>`;
+  o+=line(RFc,'var(--no)','Bosque')+line(XGc,'var(--si)','XGBoost');
+  o+=`<line x1="${xs(0)}" x2="${xs(XS.length-1)}" y1="${ys(.612)}" y2="${ys(.612)}"/>`;
+  let s=box.querySelector('svg');if(!s){s=document.createElementNS('http://www.w3.org/2000/svg','svg');box.appendChild(s)}s.innerHTML=o}
+
+// ---------- comparación
+const CMP=[['Cómo se construye','Uno, con todos los datos','Muchos en paralelo, cada uno con muestra bootstrap','Bagging + sorteo de columnas en cada corte','Muchos en fila, cada uno aprende los residuos','Gradient boosting + regularización, curvatura, submuestreo'],
+ ['Árboles','Cualquier profundidad','Profundos','Profundos','Pequeños (2–6)','Pequeños (3–8)'],
+ ['Qué reduce','—','Varianza','Varianza (más)','Sesgo (y algo de varianza)','Sesgo, con frenos a la varianza'],
+ ['¿Más árboles sobreajusta?','—','No','No','Sí: use parada temprana','Sí: use parada temprana'],
+ ['Hiperparámetros clave','max_depth, min_samples_leaf','n_estimators','n_estimators, max_features, min_samples_leaf','n_estimators, learning_rate, max_depth','los de la tarjeta + scale_pos_weight'],
+ ['Sensible a afinarlo','Mucho','Poco','Poco: funciona bien de una','Bastante','Bastante'],
+ ['Interpretación','Se lee el árbol','Importancias','Importancias','Importancias, SHAP','Importancias, SHAP'],
+ ['AUC en Bank Marketing','0,612 / 0,705','0,792','0,802','0,797','0,806']];
+$('cmpT').innerHTML=CMP.map(r=>`<tr>${r.map((c,i)=>`<td${i?'':' style="font-weight:600"'}>${c}</td>`).join('')}</tr>`).join('');
+$('useYes').innerHTML=['<b>Un árbol:</b> necesita explicar la regla completa a alguien (un comité, un regulador) y puede aceptar perder precisión.','<b>Bosque aleatorio:</b> quiere un modelo fuerte sin afinar casi nada; es la primera línea base seria en datos de tabla.','<b>Bagging:</b> quiere estabilizar otro modelo nervioso que no sea árbol (k-NN con k pequeño, por ejemplo).','<b>XGBoost / gradient boosting:</b> busca exprimir el último punto de AUC en datos de tabla y tiene tiempo para validar y afinar.','<b>XGBoost con scale_pos_weight:</b> hay desbalance y le importa el recall (aunque mover el umbral logra lo mismo).'].map(x=>`<li>${x}</li>`).join('');
+$('useNo').innerHTML=['<b>Pocos datos</b> (cientos de filas): el boosting sobreajusta fácil; una logística o un bosque pequeño suelen bastar.','<b>Imágenes, audio o texto crudo:</b> ahí ganan las redes neuronales, no los árboles.','<b>Necesita extrapolar</b> (predecir fuera del rango visto): los árboles devuelven el valor de la hoja más cercana y se quedan planos.','<b>Boosting sin conjunto de validación:</b> sin parada temprana no sabe cuándo parar.','<b>Comparar modelos con un AUC sospechoso:</b> un ensamble potente explota cualquier fuga (como <code>duration</code>) mejor que un árbol solo.'].map(x=>`<li>${x}</li>`).join('');
+
+// ---------- código
+const CODE=[['Bagging y bosque aleatorio (con OOB)',`from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import roc_auc_score
+
+bagging = BaggingClassifier(DecisionTreeClassifier(min_samples_leaf=5),
+                            n_estimators=300, oob_score=True, n_jobs=-1, random_state=0)
+bosque = RandomForestClassifier(n_estimators=300, min_samples_leaf=5,
+                                max_features="sqrt", oob_score=True, n_jobs=-1, random_state=0)
+for nombre, m in [("bagging", bagging), ("bosque", bosque)]:
+    m.fit(X_train, y_train)
+    auc = roc_auc_score(y_test, m.predict_proba(X_test)[:, 1])
+    print(f"{nombre}: OOB {m.oob_score_:.3f} | AUC prueba {auc:.3f}")`],
+['Gradient boosting de scikit-learn',`from sklearn.ensemble import GradientBoostingClassifier
+
+gb = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=0)
+gb.fit(X_train, y_train)
+print("AUC prueba:", roc_auc_score(y_test, gb.predict_proba(X_test)[:, 1]))`],
+['XGBoost con desbalance y parada temprana',`from xgboost import XGBClassifier
+from sklearn.model_selection import train_test_split
+
+# validación separada SOLO del entrenamiento (la prueba no se toca)
+X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.2,
+                                            stratify=y_train, random_state=0)
+peso = (y_tr == 0).sum() / (y_tr == 1).sum()      # ≈ 7,5 en Bank Marketing
+
+xgb = XGBClassifier(n_estimators=2000, learning_rate=0.05, max_depth=4,
+                    subsample=0.8, colsample_bytree=0.8, reg_lambda=1.0,
+                    scale_pos_weight=peso, eval_metric="auc",
+                    early_stopping_rounds=50, n_jobs=-1, random_state=0)
+xgb.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
+print("rondas usadas:", xgb.best_iteration + 1)
+print("AUC prueba:", roc_auc_score(y_test, xgb.predict_proba(X_test)[:, 1]))`]];
+$('codes').innerHTML=CODE.map(([t,c],i)=>`<div><h3>${t}</h3><div class="code"><pre><code id="code${i}"></code></pre><button data-c="${i}">Copiar</button></div></div>`).join('');
+CODE.forEach(([,c],i)=>$('code'+i).textContent=c);
+document.querySelectorAll('.code button').forEach(b=>b.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(CODE[+b.dataset.c][1]);b.textContent='Copiado'}catch(e){b.textContent='Seleccione y copie'}setTimeout(()=>b.textContent='Copiar',1600)}));
+
+// ---------- arranque
+readColors();newData(101);ctlUI();
+function redraw(){readColors();if(model)run();trio();if(RR)rrDraw();curve()}
+const ro=new ResizeObserver(()=>{clearTimeout(ro.t);ro.t=setTimeout(redraw,60)});
+['lab','t1','rr'].forEach(id=>ro.observe($(id).parentElement));ro.observe($('curve'));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',redraw);
+new MutationObserver(redraw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+run();trio();rrFit();curve();
+}
+</script>
+</body>
+</html>
